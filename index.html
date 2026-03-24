@@ -1254,67 +1254,33 @@ function ImportModal({ingredients,onImport,onCreateNew,onClose}){
 
 // ── Sync Modal ────────────────────────────────────────────────────────────────
 function SyncModal({state,syncStatus,fbDbUrl,onSetupFb,onApply,onClose}){
-  const[mode,setMode]=useState(fbDbUrl?'status':'setup');
-  const[newUrl,setNewUrl]=useState('');
-  const[tab,setTab]=useState('share');
   const[copied,setCopied]=useState(false);
-  const[pasteVal,setPasteVal]=useState('');
-  const[err,setErr]=useState('');
-  const myCode=useMemo(()=>{try{return encodeSync(state);}catch(e){return'';};},[state]);
-
-  function copy(){navigator.clipboard.writeText(myCode).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2500);});}
-  function applyCode(){
-    try{onApply(decodeSync(pasteVal,state));onClose();}
-    catch(e){setErr("Couldn't read that code — paste the whole thing.");}
-  }
-
-  if(mode==='setup')return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+  const[showAdvanced,setShowAdvanced]=useState(false);
+  const[newUrl,setNewUrl]=useState(fbDbUrl||'');
+  const isLive=syncStatus==='live';
+  const isConnecting=syncStatus==='connecting';
+  const dotColor=isLive?'#22c55e':isConnecting?'#f59e0b':'#9ca3af';
+  const label=isLive?'Live — changes sync instantly':isConnecting?'Connecting…':'Not connected';
+  return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
     <div className="modal">
-      <div className="mhdr"><div className="mtitle">Set up real-time sync</div><button className="mclose"onClick={onClose}>×</button></div>
-      <div style={{fontSize:13,color:'var(--muted)',marginBottom:14,lineHeight:1.5}}>Connect a free Firebase Realtime Database so both you and your partner see changes instantly — no refresh needed.</div>
-      <div style={{background:'var(--cream)',border:'1px solid var(--border)',borderRadius:8,padding:12,marginBottom:14}}>
-        {[
-          ['Go to','firebase.google.com/products/realtime-database','firebase.google.com','and sign in with your Google account.'],
-          ['Click','','Create a project','→ name it anything → skip Analytics → Create.'],
-          ['In the left menu click','','Realtime Database','(NOT Firestore) → Create Database → pick a region → Start in test mode → Enable. (The 30-day warning is fine for personal use — you can ignore it.)'],
-          ['Copy your database URL','','(looks like https://my-project-default-rtdb.firebaseio.com)','and paste it below.'],
-        ].map(([pre,href,bold,post],i)=><div key={i}className="setup-step">
-          <div className="step-num">{i+1}</div>
-          <div className="step-text">{pre} {href?<a href={`https://${href}`}target="_blank">{bold}</a>:<strong>{bold}</strong>} {post}</div>
-        </div>)}
+      <div className="mhdr"><div className="mtitle">Sync status</div><button className="mclose"onClick={onClose}>×</button></div>
+      <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 0 18px'}}>
+        <span style={{width:14,height:14,borderRadius:'50%',background:dotColor,display:'inline-block',flexShrink:0,boxShadow:isLive?`0 0 0 4px ${dotColor}33`:undefined}}/>
+        <span style={{fontSize:14,fontWeight:600,color:'var(--text)'}}>{label}</span>
       </div>
-      <div className="fg"><label className="lbl">Your Firebase Database URL</label>
-        <input className="inp"value={newUrl}onChange={e=>setNewUrl(e.target.value)}placeholder="https://my-project-default-rtdb.firebaseio.com"/>
+      <button className="btn btn-primary"style={{width:'100%',justifyContent:'center'}}onClick={onClose}>Done</button>
+      <div style={{marginTop:14,textAlign:'center'}}>
+        <button className="btn btn-ghost"style={{fontSize:11,color:'var(--muted)'}}onClick={()=>setShowAdvanced(v=>!v)}>⚙ {showAdvanced?'Hide':'Advanced'}</button>
       </div>
-      <div style={{display:'flex',gap:7,justifyContent:'flex-end'}}>
-        <button className="btn btn-secondary"onClick={onClose}>Skip for now</button>
-        <button className="btn btn-primary"onClick={()=>onSetupFb(newUrl.trim())}disabled={!newUrl.trim()}>Connect</button>
-      </div>
-      <hr className="divider"/>
-      <div style={{fontSize:12,color:'var(--muted)'}}>Or use manual sync below ↓</div>
-      <button className="btn btn-ghost"style={{width:'100%',justifyContent:'center',marginTop:6}}onClick={()=>setMode('manual')}>Use copy/paste sync instead</button>
-    </div>
-  </div>;
-
-  if(mode==='status')return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-    <div className="modal">
-      <div className="mhdr"><div className="mtitle">Sync</div><button className="mclose"onClick={onClose}>×</button></div>
-      <div style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:8,padding:12,marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
-        <span style={{fontSize:20}}>🔴{syncStatus==='live'?'🟢':'🟡'}</span>
-        <div>
-          <div style={{fontWeight:600,fontSize:13}}>{syncStatus==='live'?'Live sync active':'Connecting…'}</div>
-          <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>Changes sync instantly on both devices.</div>
+      {showAdvanced&&<div style={{marginTop:10,borderTop:'1px solid var(--border)',paddingTop:12}}>
+        <div className="fg"><label className="lbl">Database URL</label>
+          <input className="inp"value={newUrl}onChange={e=>setNewUrl(e.target.value)}style={{fontFamily:'monospace',fontSize:11}}/>
         </div>
-      </div>
-      <div className="fg"><label className="lbl">Database URL</label>
-        <div style={{fontSize:12,color:'var(--muted)',fontFamily:'monospace',background:'var(--cream)',padding:'6px 10px',borderRadius:6,wordBreak:'break-all'}}>{fbDbUrl}</div>
-      </div>
-      <div style={{fontSize:13,color:'var(--muted)',marginBottom:10}}>Share this URL with your partner — they paste it when setting up sync on their device.</div>
-      <button className="btn btn-primary"style={{width:'100%',justifyContent:'center'}}onClick={()=>{navigator.clipboard.writeText(fbDbUrl);setCopied(true);setTimeout(()=>setCopied(false),2000);}}>
-        {copied?'✓ Copied!':'📋 Copy database URL to share'}
-      </button>
-      <hr className="divider"/>
-      <button className="btn btn-ghost"style={{fontSize:12}}onClick={()=>setMode('setup')}>Change database URL</button>
+        <div style={{display:'flex',gap:7,justifyContent:'flex-end'}}>
+          <button className="btn btn-secondary btn-sm"onClick={()=>{navigator.clipboard.writeText(fbDbUrl);setCopied(true);setTimeout(()=>setCopied(false),2000);}}>{copied?'✓ Copied':'📋 Copy URL'}</button>
+          <button className="btn btn-primary btn-sm"onClick={()=>onSetupFb(newUrl.trim())}disabled={!newUrl.trim()||newUrl.trim()===fbDbUrl}>Save & reconnect</button>
+        </div>
+      </div>}
     </div>
   </div>;
 
@@ -2258,7 +2224,7 @@ function App(){
   const[state,dispatch]=useReducer(reducer,null);
   const[toast,setToast]=useState(null);
   const[showSync,setShowSync]=useState(false);
-  const[fbDbUrl,setFbDbUrl]=useState(()=>localStorage.getItem('kitchen_fb_url')||'');
+  const[fbDbUrl,setFbDbUrl]=useState(()=>localStorage.getItem('kitchen_fb_url')||'https://bo-s-kitchen-default-rtdb.firebaseio.com/');
   const[syncStatus,setSyncStatus]=useState('off'); // off | connecting | live | error
   const isFirst=useRef(true);
   const saveTimer=useRef(null);
