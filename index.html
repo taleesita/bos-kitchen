@@ -400,6 +400,7 @@ const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
 function getWeekStart(){const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-d.getDay());return d.toISOString().slice(0,10);}
 
 const DATA_VER=10; // bump to force-clear stale localStorage on data changes
+const SESSION_ID=uid(); // unique per page load — used to ignore our own Firebase writes
 
 // ── Sync helpers (localStorage + copy/paste for partner) ─────────────────────
 const SEED_REC_IDS=new Set((window.SEED.recipes||[]).map(r=>r.id));
@@ -445,8 +446,8 @@ function loadFirebaseSDK(){
     .then(()=>load('https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js'))
     .then(()=>window.firebase);
 }
-function fbWrite(db,state){db.ref('kitchen').set(getUserData(state));}
-function fbListen(db,cb){db.ref('kitchen').on('value',snap=>{const d=snap.val();if(d)cb(d);});}
+function fbWrite(db,state){db.ref('kitchen').set({...getUserData(state),_writer:SESSION_ID});}
+function fbListen(db,cb){db.ref('kitchen').on('value',snap=>{const d=snap.val();if(d&&d._writer!==SESSION_ID)cb(d);});}
 function fbStop(db){if(db)db.ref('kitchen').off();}
 
 // ── Initial state ────────────────────────────────────────────────────────────
@@ -2229,8 +2230,7 @@ function App(){
   const isFirst=useRef(true);
   const saveTimer=useRef(null);
   const fbDbRef=useRef(null);
-  const localWritePending=useRef(false);
-  const writeUnblock=useRef(null);
+
 
   // Load from localStorage on mount — clears stale data if DATA_VER changed
   useEffect(()=>{
@@ -2251,11 +2251,8 @@ function App(){
     if(isFirst.current){isFirst.current=false;return;}
     try{localStorage.setItem('kitchen_local',JSON.stringify(state));localStorage.setItem('kitchen_data_ver',String(DATA_VER));}catch(e){}
     if(!fbDbRef.current)return;
-    localWritePending.current=true;
     if(saveTimer.current)clearTimeout(saveTimer.current);
-    if(writeUnblock.current)clearTimeout(writeUnblock.current);
     saveTimer.current=setTimeout(()=>{try{fbWrite(fbDbRef.current,state);}catch(e){}},800);
-    writeUnblock.current=setTimeout(()=>{localWritePending.current=false;},4000);
   },[state]);
 
   // Firebase setup — async so SDK is always loaded before use
@@ -2274,7 +2271,6 @@ function App(){
         fbListen(db,ud=>{
           if(!ud)return;
           setSyncStatus('live');
-          if(localWritePending.current)return;
           dispatch({type:'INIT',state:(()=>{
             const cur=state||buildInitial();
             try{return decodeSync(encodeSync({...buildInitial(),...ud,mealPlan:ud.mealPlan,shopping:ud.shopping,holidays:ud.holidays||{},
