@@ -1541,9 +1541,9 @@ function MealPlanTab({state,dispatch,showToast}){
               ?state.recipes.filter(r=>r.holiday===noaTag||(r.tags||[]).includes(noaTag))
               :state.recipes;
             return[
-              ...[...recs].sort((a,b)=>a.name.localeCompare(b.name)).map(r=>({id:'rec_'+r.id,label:r.name,sub:'recipe'})),
-              // Always show ingredients
+              // Ingredients first — great for one-off items like 'banana'
               ...[...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).map(i=>({id:'ing_'+i.id,label:i.name,sub:i.store||'ingredient'})),
+              ...[...recs].sort((a,b)=>a.name.localeCompare(b.name)).map(r=>({id:'rec_'+r.id,label:r.name,sub:'recipe'})),
             ];
           })()}
           onSelect={item=>{
