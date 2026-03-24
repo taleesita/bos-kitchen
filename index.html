@@ -2265,6 +2265,7 @@ function App(){
         fbDbRef.current=db;
         localStorage.setItem('kitchen_fb_url',url);
         setFbDbUrl(url);
+        db.ref('.info/connected').on('value',s=>{if(s.val()===true)setSyncStatus('live');});
         fbListen(db,ud=>{
           if(!ud)return;
           setSyncStatus('live');
