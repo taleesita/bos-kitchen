@@ -429,6 +429,8 @@ function decodeSync(code,cur){
 
 // ── Firebase sync — scripts loaded dynamically so they never block page load ──
 let fbApp=null;
+let fbKitchenRef=null;
+let fbConnectedRef=null;
 function loadFirebaseSDK(){
   if(window.firebase?.database)return Promise.resolve(window.firebase);
   const load=src=>new Promise((res,rej)=>{
@@ -447,8 +449,8 @@ function loadFirebaseSDK(){
     .then(()=>window.firebase);
 }
 function fbWrite(db,state){return db.ref('kitchen').set({...getUserData(state),_writer:SESSION_ID});}
-function fbListen(db,cb){db.ref('kitchen').on('value',snap=>{const d=snap.val();if(d&&d._writer!==SESSION_ID)cb(d);});}
-function fbStop(db){if(db)db.ref('kitchen').off();}
+function fbListen(db,cb){fbKitchenRef=db.ref('kitchen');fbKitchenRef.on('value',snap=>{const d=snap.val();if(d&&d._writer!==SESSION_ID)cb(d);});}
+function fbStop(){try{if(fbKitchenRef)fbKitchenRef.off();}catch(e){}try{if(fbConnectedRef)fbConnectedRef.off();}catch(e){}fbKitchenRef=null;fbConnectedRef=null;}
 
 // ── Initial state ────────────────────────────────────────────────────────────
 function buildInitial(){
@@ -2252,10 +2254,12 @@ function App(){
     if(!state)return;
     if(isFirst.current){isFirst.current=false;return;}
     try{localStorage.setItem('kitchen_local',JSON.stringify(state));localStorage.setItem('kitchen_data_ver',String(DATA_VER));}catch(e){}
+    if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;} // always cancel pending write first
     if(fromFB.current){fromFB.current=false;return;} // Firebase update — save to localStorage only, never write back
     if(!fbDbRef.current)return;
-    if(saveTimer.current)clearTimeout(saveTimer.current);
-    saveTimer.current=setTimeout(()=>{fbWrite(fbDbRef.current,state).catch(e=>console.error('[fbWrite] failed:',e.message));},800);
+    const stateToWrite=state;
+    saveTimer.current=setTimeout(()=>{fbWrite(fbDbRef.current,stateToWrite).catch(e=>console.error('[fbWrite] failed:',e.message));},800);
+    return()=>{if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;}};
   },[state]);
 
   // Firebase setup — async so SDK is always loaded before use
@@ -2264,13 +2268,15 @@ function App(){
     setSyncStatus('connecting');
     loadFirebaseSDK().then(fb=>{
       try{
+        fbStop();
         if(fbApp){try{fbApp.delete();}catch(e){}}
         fbApp=fb.initializeApp({databaseURL:url},uid());
         const db=fb.database(fbApp);
         fbDbRef.current=db;
         localStorage.setItem('kitchen_fb_url',url);
         setFbDbUrl(url);
-        db.ref('.info/connected').on('value',s=>{if(s.val()===true)setSyncStatus('live');});
+        fbConnectedRef=db.ref('.info/connected');
+        fbConnectedRef.on('value',s=>{setSyncStatus(s.val()===true?'live':'connecting');});
         fbListen(db,ud=>{
           if(!ud)return;
           setSyncStatus('live');
