@@ -1335,8 +1335,12 @@ function CalInlineInput({recipes,onSelect,onClose,planTag}){
     calcPos();
     // close on outside pointer — no onBlur needed
     const onDown=(e)=>{
-      if(wrapRef.current?.contains(e.target))return;
-      if(ddRef.current?.contains(e.target))return;
+      const inWrap=wrapRef.current?.contains(e.target);
+      const inDd=ddRef.current?.contains(e.target);
+      console.log('[onDown] target:',e.target.className,'inWrap:',inWrap,'inDd:',inDd,'ddRef:',ddRef.current);
+      if(inWrap)return;
+      if(inDd)return;
+      console.log('[onDown] calling onClose!');
       onClose();
     };
     document.addEventListener('mousedown',onDown,true);
@@ -1348,7 +1352,7 @@ function CalInlineInput({recipes,onSelect,onClose,planTag}){
       window.removeEventListener('resize',onClose);
     };
   },[]);
-  function pick(rec){onSelect(rec);setQ('');setTimeout(()=>inputRef.current?.focus(),0);}
+  function pick(rec){console.log('[pick] called, rec:',rec?.name,rec?.id);onSelect(rec);setQ('');setTimeout(()=>inputRef.current?.focus(),0);}
   function addText(){if(q.trim()){onSelect({id:'text:'+q.trim(),name:q.trim()});setQ('');setTimeout(()=>inputRef.current?.focus(),0);}}
   const dd=ddPos&&q.trim().length>0&&ReactDOM.createPortal(
     <div ref={ddRef}style={{position:'fixed',left:ddPos.left,width:ddPos.width,
@@ -1401,7 +1405,7 @@ function MealPlanTab({state,dispatch,showToast}){
     return(state.recipes.find(r=>r.id===item)||{}).name||item;
   }
   // Add recipe or text-entry to a slot (doesn't close adder — user can keep adding)
-  function addRec(day,slot,rec){dispatch({type:'MEAL_ADD_REC',day,slot,recId:rec.id});}
+  function addRec(day,slot,rec){console.log('[addRec] dispatching',day,slot,rec?.id);dispatch({type:'MEAL_ADD_REC',day,slot,recId:rec.id});}
   function rmRec(day,slot,item){dispatch({type:'MEAL_RM_REC',day,slot,recId:item});}
   function addMulti(type,items){items.forEach(item=>dispatch({type,item}));showToast(`${items.length} items added!`);}
 
