@@ -446,7 +446,7 @@ function loadFirebaseSDK(){
     .then(()=>load('https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js'))
     .then(()=>window.firebase);
 }
-function fbWrite(db,state){db.ref('kitchen').set({...getUserData(state),_writer:SESSION_ID});}
+function fbWrite(db,state){return db.ref('kitchen').set({...getUserData(state),_writer:SESSION_ID});}
 function fbListen(db,cb){db.ref('kitchen').on('value',snap=>{const d=snap.val();if(d&&d._writer!==SESSION_ID)cb(d);});}
 function fbStop(db){if(db)db.ref('kitchen').off();}
 
@@ -2231,6 +2231,7 @@ function App(){
   const isFirst=useRef(true);
   const saveTimer=useRef(null);
   const fbDbRef=useRef(null);
+  const fromFB=useRef(false); // true when state change came from Firebase — skip write-back
 
 
   // Load from localStorage on mount — clears stale data if DATA_VER changed
@@ -2251,9 +2252,10 @@ function App(){
     if(!state)return;
     if(isFirst.current){isFirst.current=false;return;}
     try{localStorage.setItem('kitchen_local',JSON.stringify(state));localStorage.setItem('kitchen_data_ver',String(DATA_VER));}catch(e){}
+    if(fromFB.current){fromFB.current=false;return;} // Firebase update — save to localStorage only, never write back
     if(!fbDbRef.current)return;
     if(saveTimer.current)clearTimeout(saveTimer.current);
-    saveTimer.current=setTimeout(()=>{try{fbWrite(fbDbRef.current,state);}catch(e){}},800);
+    saveTimer.current=setTimeout(()=>{fbWrite(fbDbRef.current,state).catch(e=>console.error('[fbWrite] failed:',e.message));},800);
   },[state]);
 
   // Firebase setup — async so SDK is always loaded before use
@@ -2272,19 +2274,40 @@ function App(){
         fbListen(db,ud=>{
           if(!ud)return;
           setSyncStatus('live');
-          dispatch({type:'INIT',state:(()=>{
-            const cur=state||buildInitial();
-            try{
-              // Repair mealPlan if Firebase has a partial/corrupted structure
-              const initMp=buildInitial().mealPlan;
-              const mp=ud.mealPlan||{};
-              const safeMp={weekStart:mp.weekStart||initMp.weekStart,days:mp.days||initMp.days,misc:mp.misc||[],noa:mp.noa||[]};
-              return decodeSync(encodeSync({...buildInitial(),...ud,mealPlan:safeMp,shopping:ud.shopping,holidays:ud.holidays||{},
-                recipes:[...(window.SEED.recipes||[]),...(ud.customRecipes||[])],
-                ingredients:[...(window.SEED.ingredients||[]),...(ud.customIngs||[])]
-              }),cur);
-            }catch(e){return cur;}
-          })()});
+          try{
+            // Build safe mealPlan — Firebase omits empty arrays/objects so we restore them
+            const initMp=buildInitial().mealPlan;
+            const mp=ud.mealPlan||{};
+            const rawDays=mp.days||{};
+            const normDays={};
+            DAYS.forEach(d=>{
+              const dk=d.toLowerCase();
+              const day=rawDays[dk]||{};
+              normDays[dk]={
+                breakfast:Array.isArray(day.breakfast)?day.breakfast:[],
+                lunch:Array.isArray(day.lunch)?day.lunch:[],
+                dinner:Array.isArray(day.dinner)?day.dinner:[],
+                otherNomz:Array.isArray(day.otherNomz)?day.otherNomz:[]
+              };
+            });
+            const safeMp={weekStart:mp.weekStart||initMp.weekStart,days:normDays,
+              misc:Array.isArray(mp.misc)?mp.misc:[],noa:Array.isArray(mp.noa)?mp.noa:[]};
+            const seedIngs=(window.SEED.ingredients||[]).map(i=>{
+              const ov=(ud.ingOv||[]).find(o=>o.id===i.id);return ov?{...i,store:ov.store}:i;
+            });
+            function mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
+            const safeShopping=ud.shopping||{needed:[],pickedUp:[]};
+            const newState={
+              recipes:[...(window.SEED.recipes||[]),...mergeById([],ud.customRecipes||[])],
+              ingredients:[...seedIngs,...mergeById([],ud.customIngs||[])],
+              mealPlan:safeMp,
+              shopping:{needed:Array.isArray(safeShopping.needed)?safeShopping.needed:[],
+                pickedUp:Array.isArray(safeShopping.pickedUp)?safeShopping.pickedUp:[]},
+              holidays:ud.holidays||{}
+            };
+            fromFB.current=true; // mark so auto-save skips Firebase write-back
+            dispatch({type:'INIT',state:newState});
+          }catch(e){console.error('[fbListen] error processing Firebase data:',e);}
         });
       }catch(e){setSyncStatus('error');showToast('Firebase error: '+e.message);}
     }).catch(e=>{setSyncStatus('error');if(!silent)showToast('Could not load Firebase SDK — check internet connection.');});
