@@ -2229,6 +2229,7 @@ function App(){
   const isFirst=useRef(true);
   const saveTimer=useRef(null);
   const fbDbRef=useRef(null);
+  const localWritePending=useRef(false);
 
   // Load from localStorage on mount — clears stale data if DATA_VER changed
   useEffect(()=>{
@@ -2250,7 +2251,7 @@ function App(){
     try{localStorage.setItem('kitchen_local',JSON.stringify(state));localStorage.setItem('kitchen_data_ver',String(DATA_VER));}catch(e){}
     if(!fbDbRef.current)return;
     if(saveTimer.current)clearTimeout(saveTimer.current);
-    saveTimer.current=setTimeout(()=>{try{fbWrite(fbDbRef.current,state);}catch(e){}},800);
+    saveTimer.current=setTimeout(()=>{try{localWritePending.current=true;fbWrite(fbDbRef.current,state);setTimeout(()=>{localWritePending.current=false;},3000);}catch(e){localWritePending.current=false;}},800);
   },[state]);
 
   // Firebase setup — async so SDK is always loaded before use
@@ -2269,6 +2270,7 @@ function App(){
         fbListen(db,ud=>{
           if(!ud)return;
           setSyncStatus('live');
+          if(localWritePending.current)return;
           dispatch({type:'INIT',state:(()=>{
             const cur=state||buildInitial();
             try{return decodeSync(encodeSync({...buildInitial(),...ud,mealPlan:ud.mealPlan,shopping:ud.shopping,holidays:ud.holidays||{},
