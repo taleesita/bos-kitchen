@@ -1503,7 +1503,7 @@ function MealPlanTab({state,dispatch,showToast}){
       </div>
       {addingMisc&&<div style={{marginTop:8}}>
         <SearchDrop
-          items={[...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).map(i=>({id:i.id,label:i.name,sub:i.store}))}
+          items={(()=>{const miscSet=new Set((misc||[]).map(x=>x.toLowerCase()));return[...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).map(i=>({id:i.id,label:i.name,sub:i.store})).filter(i=>!miscSet.has(i.label.toLowerCase()));})()}
           onSelect={item=>{dispatch({type:'MISC_ADD',item:item.label});}}
           placeholder="Search or paste a list (comma-separated)…"
           allowNew={true}
@@ -1540,10 +1540,11 @@ function MealPlanTab({state,dispatch,showToast}){
             const recs=noaTag
               ?state.recipes.filter(r=>r.holiday===noaTag||(r.tags||[]).includes(noaTag))
               :state.recipes;
+            const noaSet=new Set((noa||[]).map(x=>x.toLowerCase()));
             return[
-              // Ingredients first — great for one-off items like 'banana'
-              ...[...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).map(i=>({id:'ing_'+i.id,label:i.name,sub:i.store||'ingredient'})),
-              ...[...recs].sort((a,b)=>a.name.localeCompare(b.name)).map(r=>({id:'rec_'+r.id,label:r.name,sub:'recipe'})),
+              // Ingredients first — hide already-selected items
+              ...[...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).map(i=>({id:'ing_'+i.id,label:i.name,sub:i.store||'ingredient'})).filter(i=>!noaSet.has(i.label.toLowerCase())),
+              ...[...recs].sort((a,b)=>a.name.localeCompare(b.name)).map(r=>({id:'rec_'+r.id,label:r.name,sub:'recipe'})).filter(r=>!noaSet.has(r.label.toLowerCase())),
             ];
           })()}
           onSelect={item=>{
