@@ -1711,18 +1711,21 @@ function ShoppingTab({state,dispatch,showToast}){
 
   // Render a single shopping item row
   function ShopRow({item,checked,onCheck,showStore}){
-    const hasQtys=item.qtys.length>0;
+    const qtyRecipes=new Set(item.qtys.map(q=>q.recipe));
+    const plainSources=item.sources.filter(s=>!qtyRecipes.has(s));
     return<div className="shop-item">
       <CB checked={checked}onChange={onCheck}/>
       <div style={{flex:1}}>
         <div className="sname">{item.name}</div>
-        {hasQtys&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:3}}>
+        {(item.qtys.length>0||plainSources.length>0)&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:3}}>
           {item.qtys.map((q,i)=><div key={i}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,display:'flex',flexDirection:'column',maxWidth:160}}>
             <span style={{color:'var(--sage-dark)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q.recipe}</span>
             {q.qty&&<span style={{color:'var(--text)',fontWeight:400}}>{q.qty}</span>}
           </div>)}
+          {plainSources.map(s=><div key={s}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,maxWidth:160}}>
+            <span style={{color:'var(--sage-dark)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}>{s}</span>
+          </div>)}
         </div>}
-        {!hasQtys&&item.sources.length>0&&<div className="smeta">{item.sources.join(', ')}</div>}
       </div>
       {showStore&&<StoreBadge store={item.store}/>}
     </div>;
