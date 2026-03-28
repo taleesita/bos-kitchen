@@ -1613,8 +1613,33 @@ function ShoppingTab({state,dispatch,showToast}){
         }
       }
     }
-    for(const item of(state.mealPlan?.misc||[])){const k='misc_'+item;allIds.add(k);sources[k]=['Misc'];}
-    for(const item of(state.mealPlan?.noa||[])){const k='noa_'+item;allIds.add(k);sources[k]=['Noa'];}
+    // Merge misc/noa items with ingredient IDs where names match, or expand recipes
+    function addListItem(item,tag){
+      const rec=state.recipes.find(r=>r.name.toLowerCase()===item.toLowerCase());
+      if(rec){
+        // It's a recipe — expand its ingredients tagged with this list
+        for(const ref of(rec.ingredientRefs||[])){
+          allIds.add(ref.id);
+          if(!sources[ref.id])sources[ref.id]=[];
+          if(!sources[ref.id].includes(tag))sources[ref.id].push(tag);
+          if(ref.quantity){if(!qtys[ref.id])qtys[ref.id]=[];if(!qtys[ref.id].find(q=>q.recipe===tag))qtys[ref.id].push({recipe:tag,qty:ref.quantity});}
+        }
+        return;
+      }
+      const ing=state.ingredients.find(i=>i.name.toLowerCase()===item.toLowerCase());
+      if(ing){
+        // Known ingredient — use its ID so it merges with recipe usage
+        allIds.add(ing.id);
+        if(!sources[ing.id])sources[ing.id]=[];
+        if(!sources[ing.id].includes(tag))sources[ing.id].push(tag);
+      } else {
+        // Unknown free-text item
+        const k=tag.toLowerCase()+'_'+item;
+        allIds.add(k);sources[k]=[tag];
+      }
+    }
+    for(const item of(state.mealPlan?.misc||[]))addListItem(item,'Misc');
+    for(const item of(state.mealPlan?.noa||[]))addListItem(item,'Noa');
     return{ids:[...allIds],sources,qtys};
   },[state.mealPlan,state.recipes]);
 
@@ -1623,7 +1648,7 @@ function ShoppingTab({state,dispatch,showToast}){
 
   const reviewItems=useMemo(()=>weekIngs.ids.map(id=>{
     if(id.startsWith('misc_')||id.startsWith('noa_')){
-      const name=id.startsWith('misc_')?id.slice(5):id.slice(4);
+      const name=id.slice(id.indexOf('_')+1);
       return{id,name,store:'',sources:weekIngs.sources[id]||[],qtys:[]};
     }
     const ing=state.ingredients.find(i=>i.id===id);
