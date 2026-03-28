@@ -1617,12 +1617,12 @@ function ShoppingTab({state,dispatch,showToast}){
     function addListItem(item,tag){
       const rec=state.recipes.find(r=>r.name.toLowerCase()===item.toLowerCase());
       if(rec){
-        // It's a recipe — expand its ingredients tagged with this list
+        // It's a recipe — expand its ingredients tagged with the recipe name (merges with meal plan usage)
         for(const ref of(rec.ingredientRefs||[])){
           allIds.add(ref.id);
           if(!sources[ref.id])sources[ref.id]=[];
-          if(!sources[ref.id].includes(tag))sources[ref.id].push(tag);
-          if(ref.quantity){if(!qtys[ref.id])qtys[ref.id]=[];if(!qtys[ref.id].find(q=>q.recipe===tag))qtys[ref.id].push({recipe:tag,qty:ref.quantity});}
+          if(!sources[ref.id].includes(rec.name))sources[ref.id].push(rec.name);
+          if(ref.quantity){if(!qtys[ref.id])qtys[ref.id]=[];if(!qtys[ref.id].find(q=>q.recipe===rec.name))qtys[ref.id].push({recipe:rec.name,qty:ref.quantity});}
         }
         return;
       }
