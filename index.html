@@ -2796,9 +2796,9 @@ function App({user,onSignOut}){
         fbConnectedRef.on('value',s=>{setSyncStatus(s.val()===true?'live':'connecting');});
         fbListen(db,ud=>{
           if(!ud){
-            // Firebase is empty — bootstrap it with our local data so partner can sync
+            // Firebase is empty — keep local state, don't overwrite Firebase.
+            // Data will reach Firebase on the next real change the user makes.
             fbInitialized.current=true;
-            if(stateRef.current)fbWrite(db,stateRef.current).catch(e=>console.error('[fbWrite bootstrap]',e.message));
             return;
           }
           setSyncStatus('live');
