@@ -2308,6 +2308,8 @@ function RecipesTab({state,dispatch,showToast}){
       {(ingFilters.size>0||timeFilter||(isMobile&&hFilter))&&<button className="filt-chip"style={{padding:'5px 9px',color:'var(--red)',borderColor:'var(--red)'}}onClick={()=>{setIngFilters(new Set());setTimeFilter(null);setHFilter('');}}>✕ Clear</button>}
     </div>
     {filtered.length===0&&<div className="empty"><div className="empty-icon">🍴</div>No recipes found{(ingFilters.size>0||timeFilter)&&<div style={{fontSize:12,marginTop:6}}>Try clearing some filters</div>}</div>}
+    {/* Datalist for Noa category autocomplete — rendered once, used by all inline edits */}
+    <datalist id="noa-cat-opts">{[...new Set((state.recipes||[]).filter(r=>r.holiday==='Nutbear'||(r.tags||[]).includes('Nutbear')).map(r=>r.noaCategory||'').filter(Boolean))].sort().map(c=><option key={c}value={c}/>)}</datalist>
     <div style={{display:'grid',gap:7}}>
       {filtered.map(r=><div key={r.id}style={{position:'relative'}}>
         <div className="rec-card"style={{marginBottom:0,borderRadius:atpRec?.rec?.id===r.id?'var(--r) var(--r) 0 0':'var(--r)'}}onClick={()=>setViewing(r)}>
@@ -2336,6 +2338,7 @@ function RecipesTab({state,dispatch,showToast}){
                   placeholder="Category (e.g. Pancakes)"
                   defaultValue={r.noaCategory||''}
                   key={`cat-${r.id}`}
+                  list="noa-cat-opts"
                   onBlur={e=>{const v=e.target.value.trim();if(v!==(r.noaCategory||''))dispatch({type:'SAVE_REC',rec:{...r,noaCategory:v},newIngs:[]});}}
                   onKeyDown={e=>{if(e.key==='Enter')e.target.blur();}}
                 />
@@ -2521,6 +2524,8 @@ function HolidaysTab({state,dispatch,showToast}){
     {selHols.size===0&&<div className="empty"><div className="empty-icon">🕍</div>Select a cookbook above to browse and plan recipes.</div>}
 
     {selHols.size>0&&<>
+      {/* Datalist for Noa category autocomplete in Cookbooks tab */}
+      <datalist id="noa-cat-opts-cb">{[...new Set((state.recipes||[]).filter(r=>r.holiday==='Nutbear'||(r.tags||[]).includes('Nutbear')).map(r=>r.noaCategory||'').filter(Boolean))].sort().map(c=><option key={c}value={c}/>)}</datalist>
       {/* Recipe list */}
       <div className="card"style={{padding:0,overflow:'hidden',marginBottom:10}}>
         {displayRecs.map(({rec})=>{
@@ -2542,6 +2547,7 @@ function HolidaysTab({state,dispatch,showToast}){
                     placeholder="Category (e.g. Pancakes)"
                     defaultValue={rec.noaCategory||''}
                     key={`cb-cat-${rec.id}`}
+                    list="noa-cat-opts-cb"
                     onBlur={e=>{const v=e.target.value.trim();if(v!==(rec.noaCategory||''))dispatch({type:'SAVE_REC',rec:{...rec,noaCategory:v},newIngs:[]});}}
                     onKeyDown={e=>{if(e.key==='Enter')e.target.blur();}}
                   />
