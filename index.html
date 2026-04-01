@@ -2694,7 +2694,19 @@ function App({user,onSignOut}){
     const savedVer=localStorage.getItem('kitchen_data_ver');
     const saved=localStorage.getItem('kitchen_local');
     if(saved&&savedVer===String(DATA_VER)){
-      try{dispatch({type:'INIT',state:JSON.parse(saved)});return;}catch(e){}
+      try{
+        const parsed=JSON.parse(saved);
+        // Always rebuild recipes/ingredients from current SEED so newly-added seed
+        // items (like Noa recipes) appear immediately without waiting for Firebase sync.
+        function _mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
+        const customRecs=(parsed.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id));
+        const customIngs=(parsed.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id));
+        parsed.recipes=[...(window.SEED.recipes||[]),..._mergeById([],customRecs)];
+        parsed.ingredients=[...(window.SEED.ingredients||[]),..._mergeById([],customIngs)];
+        // Always include NOA_SEED_ROSTER so Noa tab is pre-populated
+        parsed.noaRoster=[...new Set([...NOA_SEED_ROSTER,...(Array.isArray(parsed.noaRoster)?parsed.noaRoster:[])])];
+        dispatch({type:'INIT',state:parsed});return;
+      }catch(e){}
     }
     // Version mismatch or corrupt: start fresh with clean seed data
     localStorage.removeItem('kitchen_local');
