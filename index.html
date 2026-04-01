@@ -478,7 +478,7 @@ function loadFirebaseSDK(){
   });
 }
 function fbWrite(db,state){return db.ref('kitchen').set({...getUserData(state),_writer:SESSION_ID});}
-function fbListen(db,cb){fbKitchenRef=db.ref('kitchen');fbKitchenRef.on('value',snap=>{const d=snap.val();if(d&&d._writer!==SESSION_ID)cb(d);});}
+function fbListen(db,cb){fbKitchenRef=db.ref('kitchen');fbKitchenRef.on('value',snap=>{const d=snap.val();if(!d||d._writer!==SESSION_ID)cb(d);});}
 function fbStop(){try{if(fbKitchenRef)fbKitchenRef.off();}catch(e){}try{if(fbConnectedRef)fbConnectedRef.off();}catch(e){}fbKitchenRef=null;fbConnectedRef=null;}
 
 // ── Initial state ────────────────────────────────────────────────────────────
@@ -2796,9 +2796,15 @@ function App({user,onSignOut}){
         fbConnectedRef.on('value',s=>{setSyncStatus(s.val()===true?'live':'connecting');});
         fbListen(db,ud=>{
           if(!ud){
-            // Firebase is empty — keep local state, don't overwrite Firebase.
-            // Data will reach Firebase on the next real change the user makes.
+            // Firebase is empty — bootstrap only if local state has real content
+            // (prevents a fresh/empty device from wiping another device's data)
             fbInitialized.current=true;
+            const s=stateRef.current;
+            const hasMeals=s&&Object.values(s.mealPlan?.days||{}).some(d=>
+              ['breakfast','lunch','dinner','otherNomz'].some(slot=>(d[slot]||[]).length>0));
+            const hasCustom=s&&((s.recipes||[]).some(r=>!SEED_REC_IDS.has(r.id))||
+              (s.mealPlan?.misc||[]).length>0||(s.shopping?.needed||[]).length>0);
+            if(s&&(hasMeals||hasCustom))fbWrite(db,s).catch(e=>console.error('[fbWrite bootstrap]',e.message));
             return;
           }
           setSyncStatus('live');
