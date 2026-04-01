@@ -457,19 +457,9 @@ let fbKitchenRef=null;
 let fbConnectedRef=null;
 function loadFirebaseSDK(){
   if(window.firebase?.database)return Promise.resolve(window.firebase);
-  const load=src=>new Promise((res,rej)=>{
-    if(document.querySelector(`script[src="${src}"]`)){
-      // Script tag exists but may still be loading — poll for 5s
-      let tries=0;
-      const t=setInterval(()=>{tries++;if(window.firebase?.database){clearInterval(t);res();}else if(tries>50){clearInterval(t);rej(new Error('Timeout: '+src));}},100);
-      return;
-    }
-    const s=document.createElement('script');s.src=src;
-    s.onload=res;s.onerror=()=>rej(new Error('Failed to load '+src));
-    document.head.appendChild(s);
-  });
-  return load('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js')
-    .then(()=>load('https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js'))
+  // Use shared _scriptCache so AuthGate's pre-loaded app SDK doesn't cause a deadlock
+  return loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js')
+    .then(()=>loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js'))
     .then(()=>window.firebase);
 }
 function fbWrite(db,state){return db.ref('kitchen').set({...getUserData(state),_writer:SESSION_ID});}
