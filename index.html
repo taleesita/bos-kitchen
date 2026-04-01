@@ -5,8 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#2d4a2d">
 <title>Bo's Kitchen</title>
+<script>
+(function(){try{
+  var c=document.createElement('canvas');c.width=192;c.height=192;
+  var x=c.getContext('2d');
+  x.fillStyle='#2d4a2d';
+  var r=32;x.beginPath();x.moveTo(r,0);x.lineTo(192-r,0);x.quadraticCurveTo(192,0,192,r);
+  x.lineTo(192,192-r);x.quadraticCurveTo(192,192,192-r,192);
+  x.lineTo(r,192);x.quadraticCurveTo(0,192,0,192-r);
+  x.lineTo(0,r);x.quadraticCurveTo(0,0,r,0);x.closePath();x.fill();
+  x.font='128px serif';x.textAlign='center';x.textBaseline='middle';
+  x.fillText('\uD83C\uDF2E',96,100);
+  var u=c.toDataURL('image/png');
+  ['icon','apple-touch-icon'].forEach(function(rel){
+    var l=document.createElement('link');l.rel=rel;l.href=u;document.head.appendChild(l);
+  });
+}catch(e){}}());
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
