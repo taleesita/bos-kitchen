@@ -2787,8 +2787,11 @@ function App({user,onSignOut}){
       try{
         fbStop();
         if(fbApp){try{fbApp.delete();}catch(e){}}
-        fbApp=fb.initializeApp({databaseURL:url},uid());
-        const db=fb.database(fbApp);
+        // Use the default Firebase app so the database connection
+        // automatically carries the Google sign-in auth token.
+        // (Named apps with only a databaseURL have no auth credentials.)
+        fbApp=null;
+        const db=fb.database(fb.app());
         fbDbRef.current=db;
         localStorage.setItem('kitchen_fb_url',url);
         setFbDbUrl(url);
