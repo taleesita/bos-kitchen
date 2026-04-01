@@ -2394,6 +2394,11 @@ function AuthGate({children}){
         catch(e){app=fb.initializeApp(FB_CONFIG,'kitchen-auth');}
         const auth=fb.auth(app);
         authRef.current=auth;
+        // Handle any error coming back from a redirect sign-in attempt
+        auth.getRedirectResult().catch(e=>{
+          setErr('Sign-in failed. Please try again.');
+          setBusy(false);
+        });
         auth.onAuthStateChanged(u=>{
           if(!u){setPhase('out');setBusy(false);}
           else if(ALLOWED_EMAILS.has(u.email?.toLowerCase())){setUser(u);setPhase('in');setBusy(false);}
@@ -2411,11 +2416,11 @@ function AuthGate({children}){
     if(!authRef.current)return;
     setBusy(true);setErr('');
     const provider=new window.firebase.auth.GoogleAuthProvider();
-    authRef.current.signInWithPopup(provider)
-      .catch(e=>{
-        if(e.code!=='auth/popup-closed-by-user')setErr('Sign-in failed. Please try again.');
-        setBusy(false);
-      });
+    // Use redirect (not popup) — works on all browsers including iOS Safari
+    authRef.current.signInWithRedirect(provider).catch(e=>{
+      setErr('Sign-in failed. Please try again.');
+      setBusy(false);
+    });
   }
 
   function handleSignOut(){
