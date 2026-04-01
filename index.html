@@ -427,6 +427,30 @@ function decodeSync(code,cur){
     mealPlan:ud.mealPlan,shopping:ud.shopping,holidays:ud.holidays||{}};
 }
 
+// ── Firebase Auth config ───────────────────────────────────────────────────────
+const FB_CONFIG={
+  apiKey:"AIzaSyD5rILkmlOzpYCMPSn3iByK0KCyRyGbcK8",
+  authDomain:"bo-s-kitchen.firebaseapp.com",
+  databaseURL:"https://bo-s-kitchen-default-rtdb.firebaseio.com",
+  projectId:"bo-s-kitchen",
+  storageBucket:"bo-s-kitchen.firebasestorage.app",
+  messagingSenderId:"296130586208",
+  appId:"1:296130586208:web:d02f6a618d25699d260505"
+};
+const ALLOWED_EMAILS=new Set(['taly.matiteyahu@gmail.com','doug.pickard@gmail.com']);
+
+// Shared script loader — caches promises so duplicate calls are no-ops
+const _scriptCache={};
+function loadScript(src){
+  if(_scriptCache[src])return _scriptCache[src];
+  _scriptCache[src]=new Promise((res,rej)=>{
+    const s=document.createElement('script');s.src=src;
+    s.onload=res;s.onerror=()=>rej(new Error('Failed: '+src));
+    document.head.appendChild(s);
+  });
+  return _scriptCache[src];
+}
+
 // ── Firebase sync — scripts loaded dynamically so they never block page load ──
 let fbApp=null;
 let fbKitchenRef=null;
@@ -2362,7 +2386,81 @@ function HolidaysTab({state,dispatch,showToast}){
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
-function App(){
+// ── Auth Gate ──────────────────────────────────────────────────────────────────
+function AuthGate({children}){
+  const[phase,setPhase]=useState('loading'); // loading | out | in | denied
+  const[user,setUser]=useState(null);
+  const[busy,setBusy]=useState(false);
+  const[err,setErr]=useState('');
+  const authRef=useRef(null);
+
+  useEffect(()=>{
+    loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js')
+      .then(()=>loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js'))
+      .then(()=>{
+        const fb=window.firebase;
+        let app;
+        try{app=fb.app('kitchen-auth');}
+        catch(e){app=fb.initializeApp(FB_CONFIG,'kitchen-auth');}
+        const auth=fb.auth(app);
+        authRef.current=auth;
+        auth.onAuthStateChanged(u=>{
+          if(!u){setPhase('out');setBusy(false);}
+          else if(ALLOWED_EMAILS.has(u.email?.toLowerCase())){setUser(u);setPhase('in');setBusy(false);}
+          else{
+            auth.signOut();
+            setErr(`${u.email} is not authorized to access this app.`);
+            setPhase('denied');setBusy(false);
+          }
+        });
+      })
+      .catch(()=>{setPhase('out');setErr('Could not load authentication. Check your connection.');});
+  },[]);
+
+  function handleSignIn(){
+    if(!authRef.current)return;
+    setBusy(true);setErr('');
+    const provider=new window.firebase.auth.GoogleAuthProvider();
+    authRef.current.signInWithPopup(provider)
+      .catch(e=>{
+        if(e.code!=='auth/popup-closed-by-user')setErr('Sign-in failed. Please try again.');
+        setBusy(false);
+      });
+  }
+
+  function handleSignOut(){
+    authRef.current?.signOut();
+    setUser(null);setPhase('out');
+  }
+
+  if(phase==='loading')return(
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--cream)'}}>
+      <span className="spin"/>
+    </div>
+  );
+  if(phase==='in')return children({user,onSignOut:handleSignOut});
+  return<LoginScreen onSignIn={handleSignIn}busy={busy}err={err}/>;
+}
+
+function LoginScreen({onSignIn,busy,err}){
+  return(
+    <div style={{minHeight:'100vh',background:'var(--cream)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
+      <div style={{fontSize:56,marginBottom:12}}>🌮</div>
+      <div style={{fontFamily:"'Kalam',cursive",fontSize:34,fontWeight:700,color:'#2d4a2d',marginBottom:4,textShadow:'0 1px 3px rgba(0,0,0,.1)'}}>Bo's Kitchen</div>
+      <div style={{fontSize:14,color:'var(--muted)',marginBottom:36}}>Sign in to access your kitchen</div>
+      {err&&<div style={{background:'#fde8e8',color:'#8a2020',border:'1px solid #f5c6c6',borderRadius:8,padding:'10px 16px',fontSize:13,marginBottom:20,maxWidth:300,textAlign:'center',lineHeight:1.4}}>{err}</div>}
+      <button onClick={onSignIn}disabled={busy}
+        style={{display:'flex',alignItems:'center',gap:10,background:'white',border:'1px solid #ddd',borderRadius:8,padding:'12px 22px',fontSize:15,fontWeight:500,color:busy?'#aaa':'#333',cursor:busy?'default':'pointer',boxShadow:'0 2px 6px rgba(0,0,0,0.1)',transition:'box-shadow .15s'}}>
+        {busy
+          ?<span className="spin"style={{width:18,height:18,borderWidth:2}}/>
+          :<svg width="18"height="18"viewBox="0 0 48 48"><path fill="#EA4335"d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4"d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05"d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853"d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.34-8.16 2.34-6.26 0-11.57-3.58-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>}
+        {busy?'Signing in…':'Sign in with Google'}
+      </button>
+    </div>
+  );
+}
+
+function App({onSignOut}){
   const[tab,setTab]=useState('mealplan');
   const[state,dispatch]=useReducer(reducer,null);
   const[toast,setToast]=useState(null);
@@ -2484,9 +2582,15 @@ function App(){
   return<div id="root">
     <div className="hdr">
       <div className="hdr-title">🌮 Bo's Kitchen</div>
-      <button className={`sync-btn${syncStatus==='live'?' sync-live':''}`}onClick={()=>setShowSync(true)}title={syncLabel}>
-        <span className={`sync-dot ${dotClass}`}/>{syncStatus!=='live'&&syncLabel}
-      </button>
+      <div style={{display:'flex',alignItems:'center',gap:6}}>
+        <button className={`sync-btn${syncStatus==='live'?' sync-live':''}`}onClick={()=>setShowSync(true)}title={syncLabel}>
+          <span className={`sync-dot ${dotClass}`}/>{syncStatus!=='live'&&syncLabel}
+        </button>
+        {onSignOut&&<button onClick={onSignOut}title="Sign out"
+          style={{background:'none',border:'none',color:'rgba(240,237,228,.55)',fontSize:18,cursor:'pointer',padding:'4px 6px',lineHeight:1,borderRadius:4,transition:'color .15s'}}
+          onMouseEnter={e=>e.target.style.color='rgba(240,237,228,.9)'}
+          onMouseLeave={e=>e.target.style.color='rgba(240,237,228,.55)'}>↪</button>}
+      </div>
     </div>
     <nav className="tabs">
       {TABS.map(t=>{
@@ -2512,7 +2616,9 @@ function App(){
   </div>;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <AuthGate>{({user,onSignOut})=><App onSignOut={onSignOut}/>}</AuthGate>
+);
 </script>
 </body>
 </html>
