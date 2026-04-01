@@ -259,6 +259,7 @@ textarea.inp{resize:vertical;min-height:70px;}
     border-top:1px solid var(--border);border-bottom:none;
     display:flex;justify-content:space-around;
     padding-bottom:env(safe-area-inset-bottom);
+    padding-left:4px;padding-right:4px;
     box-shadow:0 -2px 12px rgba(0,0,0,0.08);
     height:calc(58px + env(safe-area-inset-bottom));
     align-items:flex-start;padding-top:0;
@@ -266,9 +267,9 @@ textarea.inp{resize:vertical;min-height:70px;}
   .tab{
     flex:1;display:flex;flex-direction:column;align-items:center;
     justify-content:center;gap:1px;
-    padding:8px 4px 6px;font-size:9px;font-weight:500;
+    padding:8px 2px 6px;font-size:9px;font-weight:500;
     border-bottom:none;border-top:2px solid transparent;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;overflow:visible;text-overflow:ellipsis;
     min-height:54px;
   }
   .tab.on{border-top-color:var(--sage);border-bottom:none;color:var(--sage-dark);}
