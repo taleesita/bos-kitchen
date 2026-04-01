@@ -2416,11 +2416,20 @@ function AuthGate({children}){
     if(!authRef.current)return;
     setBusy(true);setErr('');
     const provider=new window.firebase.auth.GoogleAuthProvider();
-    // Use redirect (not popup) — works on all browsers including iOS Safari
-    authRef.current.signInWithRedirect(provider).catch(e=>{
-      setErr('Sign-in failed. Please try again.');
-      setBusy(false);
-    });
+    // Standalone PWA (added to home screen) has isolated context — popup stays in-app.
+    // Regular mobile Safari needs redirect because popups are blocked.
+    const isStandalone=window.navigator.standalone===true||window.matchMedia('(display-mode:standalone)').matches;
+    if(isStandalone){
+      authRef.current.signInWithPopup(provider).catch(e=>{
+        if(e.code!=='auth/popup-closed-by-user')setErr('Sign-in failed. Please try again.');
+        setBusy(false);
+      });
+    }else{
+      authRef.current.signInWithRedirect(provider).catch(e=>{
+        setErr('Sign-in failed. Please try again.');
+        setBusy(false);
+      });
+    }
   }
 
   function handleSignOut(){
