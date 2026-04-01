@@ -2162,6 +2162,7 @@ function IngredientFilterSheet({ingredients,recipes,selected,onToggle,onClose}){
 function NoaTab({state,dispatch,showToast,isNanny}){
   const[search,setSearch]=useState('');
   const[catFilter,setCatFilter]=useState('');
+  const[editing,setEditing]=useState(null);
 
   const roster=state.noaRoster||[];
   const rosterSet=new Set(roster);
@@ -2233,23 +2234,30 @@ function NoaTab({state,dispatch,showToast,isNanny}){
           const ings=ingList(r);
           return<div key={r.id}style={{background:'white',borderRadius:'var(--r)',border:'1px solid var(--border)',padding:'12px 14px',boxShadow:'var(--shadow)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:4}}>
-              <div>
+              <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:15,color:'var(--text)'}}>{r.name}</div>
                 {r.noaCategory&&<div style={{fontSize:12,color:'var(--muted)',textTransform:'capitalize',marginTop:1}}>{r.noaCategory}</div>}
               </div>
-              {r.noaLabel&&<div style={{background:'var(--noa)',color:'white',fontWeight:800,fontSize:18,borderRadius:8,minWidth:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,letterSpacing:'0.5px',padding:'0 8px'}}>
-                {r.noaLabel}
-              </div>}
+              <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                {r.noaLabel&&<div style={{background:'var(--noa)',color:'white',fontWeight:800,fontSize:18,borderRadius:8,minWidth:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',letterSpacing:'0.5px',padding:'0 8px'}}>
+                  {r.noaLabel}
+                </div>}
+                {!isNanny&&<button className="btn btn-icon"style={{padding:'5px 8px'}}onClick={()=>setEditing(r)}title="Edit recipe"><span style={{display:'inline-block',transform:'scaleX(-1)',fontSize:16,lineHeight:1}}>✏️</span></button>}
+              </div>
             </div>
             {ings.length>0&&<div style={{fontSize:13,color:'var(--text)',marginTop:6,lineHeight:1.5}}>
               <span style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.5px'}}>Ingredients: </span>
               {ings.join(', ')}
             </div>}
-            {!r.noaLabel&&!isNanny&&<div style={{fontSize:11,color:'var(--amber)',marginTop:6}}>⚠ No label set — add one in the Recipes tab (filter to Nutbear)</div>}
+            {!r.noaLabel&&!isNanny&&<div style={{fontSize:11,color:'var(--amber)',marginTop:6}}>⚠ No label set — edit with ✏️ above or via Recipes tab (filter to Nutbear)</div>}
           </div>;
         })}
       </div>
     </>}
+    {editing&&<RecipeModal recipe={editing}ingredients={state.ingredients}allRecipes={state.recipes}
+      onSave={(rec,ni)=>{dispatch({type:'SAVE_REC',rec,newIngs:ni});setEditing(null);showToast(`${rec.name} saved!`);}}
+      onDelete={id=>{dispatch({type:'DEL_REC',id});setEditing(null);showToast('Deleted');}}
+      onClose={()=>setEditing(null)}/>}
   </div>;
 }
 
@@ -2542,7 +2550,7 @@ function HolidaysTab({state,dispatch,showToast}){
                 <span style={{fontSize:13,fontWeight:500,cursor:'pointer',color:'var(--sage-dark)',textDecoration:'underline',textDecorationStyle:'dotted',textDecorationColor:'var(--sage-light)'}}onClick={()=>setViewing(rec)}>{rec.name}</span>
                 {rec.holiday&&selHols.size>1&&<span style={{fontSize:10,color:'var(--muted)',marginLeft:5}}>{rec.holiday}</span>}
                 {rec.url&&<a href={rec.url}target="_blank"style={{fontSize:11,marginLeft:6}}>↗</a>}
-                {selHols.has('Nutbear')&&<div style={{display:'flex',gap:5,marginTop:5}}onClick={e=>e.stopPropagation()}>
+                {(rec.holiday==='Nutbear'||(rec.tags||[]).includes('Nutbear'))&&<div style={{display:'flex',gap:5,marginTop:5}}onClick={e=>e.stopPropagation()}>
                   <input className="inp"style={{flex:2,fontSize:11,padding:'3px 7px',height:'auto'}}
                     placeholder="Category (e.g. Pancakes)"
                     defaultValue={rec.noaCategory||''}
@@ -2654,6 +2662,29 @@ function AuthWrapper({children}){
   );
   if(!user)return<LoginScreen onSignIn={signIn}denied={denied}/>;
   return React.cloneElement(children,{user,onSignOut:signOut});
+}
+
+function LocalNamePicker({onPick}){
+  const USERS=[
+    {email:'taly.matiteyahu@gmail.com',name:'Taly',emoji:'👩‍🍳'},
+    {email:'doug.pickard@gmail.com',name:'Doug',emoji:'👨‍🍳'},
+    {email:'rachelvaknin61@gmail.com',name:'Rachel',emoji:'🍼'},
+  ];
+  return(
+    <div style={{minHeight:'100vh',background:'var(--cream)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'}}>
+      <div style={{fontSize:56,marginBottom:12}}>🌮</div>
+      <div style={{fontFamily:"'Kalam',cursive",fontSize:34,fontWeight:700,color:'#2d4a2d',marginBottom:4,textShadow:'0 1px 3px rgba(0,0,0,.1)'}}>Bo's Kitchen</div>
+      <div style={{fontSize:14,color:'var(--muted)',marginBottom:32}}>Who's cooking today?</div>
+      <div style={{display:'flex',flexDirection:'column',gap:12,width:'100%',maxWidth:280}}>
+        {USERS.map(u=>(
+          <button key={u.email}onClick={()=>onPick(u.email)}
+            style={{background:'white',border:'2px solid var(--border)',borderRadius:16,padding:'16px 20px',fontSize:17,fontWeight:600,color:'var(--text)',cursor:'pointer',display:'flex',alignItems:'center',gap:14,boxShadow:'var(--shadow)',fontFamily:'inherit'}}>
+            <span style={{fontSize:26}}>{u.emoji}</span>{u.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function LoginScreen({onSignIn,denied}){
