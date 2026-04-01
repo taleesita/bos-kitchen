@@ -399,7 +399,8 @@ const FB_CONFIG={
   messagingSenderId:"296130586208",
   appId:"1:296130586208:web:d02f6a618d25699d260505"
 };
-const ALLOWED_EMAILS=['taly.matiteyahu@gmail.com','doug.pickard@gmail.com'];
+const ALLOWED_EMAILS=['taly.matiteyahu@gmail.com','doug.pickard@gmail.com','rachelvaknin61@gmail.com'];
+const NANNY_EMAILS=['rachelvaknin61@gmail.com'];
 firebase.initializeApp(FB_CONFIG);
 const kitchenAuth=firebase.auth();
 </script>
@@ -429,7 +430,8 @@ function getUserData(state){
   });
   return{v:1,mealPlan:state.mealPlan,shopping:state.shopping,holidays:state.holidays||{},
     customRecipes:(state.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id)),
-    customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv};
+    customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv,
+    noaRoster:state.noaRoster||[]};
 }
 function encodeSync(state){return btoa(unescape(encodeURIComponent(JSON.stringify(getUserData(state)))));}
 function decodeSync(code,cur){
@@ -440,7 +442,8 @@ function decodeSync(code,cur){
   const myIngs=(cur.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id));
   return{recipes:[...(window.SEED.recipes||[]),...mergeById(myRecs,ud.customRecipes||[])],
     ingredients:[...seedIngs,...mergeById(myIngs,ud.customIngs||[])],
-    mealPlan:ud.mealPlan,shopping:ud.shopping,holidays:ud.holidays||{}};
+    mealPlan:ud.mealPlan,shopping:ud.shopping,holidays:ud.holidays||{},
+    noaRoster:Array.isArray(ud.noaRoster)?ud.noaRoster:[]};
 }
 // ── Firebase sync — scripts loaded dynamically so they never block page load ──
 let fbApp=null;
@@ -464,7 +467,7 @@ function fbStop(){try{if(fbKitchenRef)fbKitchenRef.off();}catch(e){}try{if(fbCon
 function buildInitial(){
   return{recipes:window.SEED.recipes,ingredients:window.SEED.ingredients,
     mealPlan:{weekStart:getWeekStart(),days:Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}])),
-    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{}};
+    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{},noaRoster:[]};
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -506,6 +509,12 @@ function reducer(state,action){
       return{...state,mealPlan:{...state.mealPlan,noa}};
     }
     case'NOA_RM':return{...state,mealPlan:{...state.mealPlan,noa:(state.mealPlan.noa||[]).filter(x=>x!==action.item)}};
+    case'NOA_ROSTER_ADD':{
+      // Adds a recipe ID to the persistent nanny roster (never removed week-over-week)
+      const roster=[...(state.noaRoster||[])];
+      if(!roster.includes(action.recId))roster.push(action.recId);
+      return{...state,noaRoster:roster};
+    }
     case'NEW_WEEK':{
       const emptyDays=Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}]));
       return{...state,mealPlan:{weekStart:getWeekStart(),days:emptyDays,misc:[],noa:[]},shopping:{needed:[],pickedUp:[]}};
@@ -1132,7 +1141,7 @@ function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast})
                 </div>}
                 {planMode==='noa'&&<div style={{display:'flex',gap:6,width:'100%',justifyContent:'flex-end'}}>
                   <span style={{fontSize:12,color:'var(--muted)',alignSelf:'center',flex:1}}>Add "{recipe.name}" to Noa's list</span>
-                  <button className="btn btn-primary btn-sm"style={{background:'var(--noa)',border:'none'}}onClick={()=>{dispatch({type:'NOA_ADD',item:recipe.name});showToast&&showToast(`Added to Noa's list!`);setAddingPlan(false);}}>✓ Add to Noa</button>
+                  <button className="btn btn-primary btn-sm"style={{background:'var(--noa)',border:'none'}}onClick={()=>{dispatch({type:'NOA_ADD',item:recipe.name});dispatch({type:'NOA_ROSTER_ADD',recId:recipe.id});showToast&&showToast(`Added to Noa's list!`);setAddingPlan(false);}}>✓ Add to Noa</button>
                 </div>}
                 <button className="btn btn-ghost btn-sm"style={{alignSelf:'flex-end'}}onClick={()=>setAddingPlan(false)}>Cancel</button>
               </div>
@@ -1454,6 +1463,11 @@ function MealPlanTab({state,dispatch,showToast}){
   const[planTag,setPlanTag]=useState('');
   const[addingMisc,setAddingMisc]=useState(false);
   const[addingNoa,setAddingNoa]=useState(false);
+  const[quickAddNoa,setQuickAddNoa]=useState(false); // quick-add new Noa recipe form
+  const[qName,setQName]=useState('');
+  const[qCategory,setQCategory]=useState('');
+  const[qLabel,setQLabel]=useState('');
+  const[qIngs,setQIngs]=useState(''); // comma-separated ingredient names
   const[noaTag,setNoaTag]=useState('Nutbear');
   const[noaTagExpanded,setNoaTagExpanded]=useState(false);
   const isMobile=useIsMobile();
@@ -1609,14 +1623,70 @@ function MealPlanTab({state,dispatch,showToast}){
     <div className="weekly-section">
       <div className="weekly-section-title"style={{color:'var(--noa)'}}>
         🌟 Noa's meals this week
-        <button className="btn-icon"style={{marginLeft:'auto'}}onClick={()=>setAddingNoa(!addingNoa)}>＋</button>
+        <div style={{marginLeft:'auto',display:'flex',gap:4}}>
+          <button className="btn btn-sm"style={{background:'#fff3e0',border:'1px solid #ffd180',color:'var(--noa)',fontSize:11,padding:'2px 7px',borderRadius:10}}
+            title="Create a new Noa recipe"
+            onClick={()=>{setQuickAddNoa(x=>!x);setAddingNoa(false);setQName('');setQCategory('');setQLabel('');setQIngs('');}}>
+            📝 New Recipe
+          </button>
+          <button className="btn-icon"onClick={()=>setAddingNoa(!addingNoa)}>＋</button>
+        </div>
       </div>
       <div style={{display:'flex',flexWrap:'wrap',gap:2}}>
         {noa.map(item=><div key={item}className="chip noa">
           {item}<button onClick={()=>dispatch({type:'NOA_RM',item})}>×</button>
         </div>)}
-        {noa.length===0&&!addingNoa&&<span style={{fontSize:12,color:'var(--muted)'}}>Add Noa's foods for the week</span>}
+        {noa.length===0&&!addingNoa&&!quickAddNoa&&<span style={{fontSize:12,color:'var(--muted)'}}>Add Noa's foods for the week</span>}
       </div>
+
+      {/* Quick-add new Noa recipe form */}
+      {quickAddNoa&&<div style={{marginTop:8,background:'#fffaf4',border:'1px solid #ffd180',borderRadius:'var(--r)',padding:12,display:'flex',flexDirection:'column',gap:8}}>
+        <div style={{fontWeight:600,fontSize:13,color:'var(--noa)'}}>📝 New Noa Recipe</div>
+        <input className="inp"style={{fontSize:13}}placeholder="Recipe name (e.g. Raspberry Pancakes)"value={qName}onChange={e=>setQName(e.target.value)}/>
+        <div style={{display:'flex',gap:6}}>
+          <input className="inp"style={{flex:2,fontSize:13}}placeholder="Category (e.g. Pancakes)"value={qCategory}onChange={e=>setQCategory(e.target.value)}/>
+          <input className="inp"style={{flex:1,fontSize:13,textTransform:'uppercase'}}placeholder="Label (e.g. RP)"value={qLabel}onChange={e=>setQLabel(e.target.value.toUpperCase())}/>
+        </div>
+        <input className="inp"style={{fontSize:13}}placeholder="Ingredients (comma-separated)"value={qIngs}onChange={e=>setQIngs(e.target.value)}/>
+        <div style={{fontSize:11,color:'var(--muted)'}}>Ingredients list will be shown to the nanny exactly as typed — you can use short names like "banana, oat flour, egg".</div>
+        <div style={{display:'flex',gap:6}}>
+          <button className="btn btn-primary btn-sm"style={{background:'var(--noa)',border:'none',flex:1}}
+            disabled={!qName.trim()}
+            onClick={()=>{
+              const recId=uid();
+              const parsedIngs=qIngs.split(',').map(s=>s.trim()).filter(Boolean);
+              // Build ingredient refs — try to match existing, otherwise store name as-is
+              const ingRefs=parsedIngs.map(name=>{
+                const existing=state.ingredients.find(i=>i.name.toLowerCase()===name.toLowerCase());
+                if(existing)return{id:existing.id,qty:'',unit:''};
+                const newId=uid();
+                dispatch({type:'SAVE_ING',ing:{id:newId,name,store:''}});
+                return{id:newId,qty:'',unit:''};
+              });
+              const newRec={
+                id:recId,
+                name:qName.trim(),
+                holiday:'Nutbear', // auto-tag to Nutbear cookbook
+                tags:['Nutbear'],
+                noaCategory:qCategory.trim(),
+                noaLabel:qLabel.trim(),
+                ingredientRefs:ingRefs,
+                instructions:[],
+                url:''
+              };
+              dispatch({type:'SAVE_REC',rec:newRec,newIngs:[]});
+              dispatch({type:'NOA_ADD',item:qName.trim()}); // add to this week's Noa list
+              dispatch({type:'NOA_ROSTER_ADD',recId}); // add to persistent nanny roster
+              showToast&&showToast(`"${qName.trim()}" added to Noa's recipes!`);
+              setQuickAddNoa(false);
+              setQName('');setQCategory('');setQLabel('');setQIngs('');
+            }}>
+            ✓ Save Recipe
+          </button>
+          <button className="btn btn-ghost btn-sm"onClick={()=>setQuickAddNoa(false)}>Cancel</button>
+        </div>
+      </div>}
+
       {addingNoa&&<div style={{marginTop:8}}>
         {/* Cookbook filter chips — collapsed by default */}
         <div style={{marginBottom:8}}>
@@ -1641,6 +1711,11 @@ function MealPlanTab({state,dispatch,showToast}){
           })()}
           onSelect={item=>{
             dispatch({type:'NOA_ADD',item:item.label});
+            // If it's an existing recipe, also add to persistent nanny roster
+            if(!item.isNew&&item.id.startsWith('rec_')){
+              const recId=item.id.replace('rec_','');
+              dispatch({type:'NOA_ROSTER_ADD',recId});
+            }
             if(item.isNew){
               const newId=uid();
               dispatch({type:'SAVE_ING',ing:{id:newId,name:item.label,store:''}});
@@ -2044,6 +2119,101 @@ function IngredientFilterSheet({ingredients,recipes,selected,onToggle,onClose}){
   </div>;
 }
 
+// ── Noa Tab (nanny view) ──────────────────────────────────────────────────────
+function NoaTab({state,dispatch,showToast,isNanny}){
+  const[search,setSearch]=useState('');
+  const[catFilter,setCatFilter]=useState('');
+
+  const roster=state.noaRoster||[];
+  const rosterSet=new Set(roster);
+
+  // All Nutbear recipes that have ever been added to the roster
+  const noaRecipes=useMemo(()=>
+    (state.recipes||[]).filter(r=>rosterSet.has(r.id))
+      .sort((a,b)=>a.name.localeCompare(b.name)),
+  [state.recipes,roster]);
+
+  // Unique categories for filter chips
+  const categories=useMemo(()=>
+    [...new Set(noaRecipes.map(r=>r.noaCategory||'').filter(Boolean))].sort(),
+  [noaRecipes]);
+
+  // Full ingredient name lookup
+  function ingList(r){
+    return(r.ingredientRefs||[]).map(ref=>{
+      const ing=state.ingredients.find(i=>i.id===ref.id);
+      return ing?ing.name:'';
+    }).filter(Boolean);
+  }
+
+  const q=search.trim().toLowerCase();
+  const filtered=useMemo(()=>noaRecipes.filter(r=>{
+    if(catFilter&&(r.noaCategory||'').toLowerCase()!==catFilter.toLowerCase())return false;
+    if(!q)return true;
+    const ings=ingList(r).join(' ').toLowerCase();
+    return r.name.toLowerCase().includes(q)||
+      (r.noaLabel||'').toLowerCase().includes(q)||
+      (r.noaCategory||'').toLowerCase().includes(q)||
+      ings.includes(q);
+  }),[noaRecipes,catFilter,q,state.ingredients]);
+
+  return<div className="content">
+    <div className="sh">
+      <div className="sh-title"style={{color:'var(--noa)'}}>🍼 Noa's Food</div>
+      {!isNanny&&<span style={{fontSize:12,color:'var(--muted)'}}>Nanny sees this tab only</span>}
+    </div>
+
+    {noaRecipes.length===0&&<div className="empty">
+      <div className="empty-icon">🍼</div>
+      <div>No recipes yet!</div>
+      <div style={{fontSize:12,color:'var(--muted)',marginTop:6}}>
+        {isNanny
+          ? "Rachel will add recipes here as she cooks for Noa."
+          : "Add recipes to Noa's meals from the Meal Plan tab or by clicking 📅 → 🌟 on any recipe."}
+      </div>
+    </div>}
+
+    {noaRecipes.length>0&&<>
+      {/* Search */}
+      <input className="inp"style={{marginBottom:8}}value={search}onChange={e=>setSearch(e.target.value)}placeholder="Search by name, ingredient, category, or code…"/>
+
+      {/* Category filter chips */}
+      {categories.length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
+        <button style={{border:`1.5px solid ${!catFilter?'var(--noa)':'var(--border)'}`,background:!catFilter?'#fff3e0':'white',borderRadius:20,padding:'3px 10px',fontSize:12,cursor:'pointer',color:!catFilter?'var(--noa)':'var(--muted)',fontFamily:'inherit'}}
+          onClick={()=>setCatFilter('')}>All</button>
+        {categories.map(c=><button key={c}
+          style={{border:`1.5px solid ${catFilter===c?'var(--noa)':'var(--border)'}`,background:catFilter===c?'#fff3e0':'white',borderRadius:20,padding:'3px 10px',fontSize:12,cursor:'pointer',color:catFilter===c?'var(--noa)':'var(--muted)',fontFamily:'inherit',textTransform:'capitalize'}}
+          onClick={()=>setCatFilter(x=>x===c?'':c)}>{c}</button>)}
+      </div>}
+
+      {filtered.length===0&&<div className="empty"><div className="empty-icon">🔍</div>No recipes match</div>}
+
+      {/* Recipe cards */}
+      <div style={{display:'grid',gap:8}}>
+        {filtered.map(r=>{
+          const ings=ingList(r);
+          return<div key={r.id}style={{background:'white',borderRadius:'var(--r)',border:'1px solid var(--border)',padding:'12px 14px',boxShadow:'var(--shadow)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:4}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:15,color:'var(--text)'}}>{r.name}</div>
+                {r.noaCategory&&<div style={{fontSize:12,color:'var(--muted)',textTransform:'capitalize',marginTop:1}}>{r.noaCategory}</div>}
+              </div>
+              {r.noaLabel&&<div style={{background:'var(--noa)',color:'white',fontWeight:800,fontSize:18,borderRadius:8,minWidth:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,letterSpacing:'0.5px',padding:'0 8px'}}>
+                {r.noaLabel}
+              </div>}
+            </div>
+            {ings.length>0&&<div style={{fontSize:13,color:'var(--text)',marginTop:6,lineHeight:1.5}}>
+              <span style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.5px'}}>Ingredients: </span>
+              {ings.join(', ')}
+            </div>}
+            {!r.noaLabel&&!isNanny&&<div style={{fontSize:11,color:'var(--amber)',marginTop:6}}>⚠ No label set — add one in the Recipes tab (filter to Nutbear)</div>}
+          </div>;
+        })}
+      </div>
+    </>}
+  </div>;
+}
+
 function RecipesTab({state,dispatch,showToast}){
   const[search,setSearch]=useState('');
   const[hFilter,setHFilter]=useState('');
@@ -2120,6 +2290,26 @@ function RecipesTab({state,dispatch,showToast}){
                   {r.url&&<a href={r.url}target="_blank"onClick={e=>e.stopPropagation()}style={{fontSize:12}}>Recipe →</a>}
                 </div>
               </div>
+              {hFilter==='Nutbear'&&<div style={{display:'flex',gap:6,marginTop:6}}onClick={e=>e.stopPropagation()}>
+                <input
+                  className="inp"
+                  style={{flex:2,fontSize:11,padding:'3px 7px',height:'auto'}}
+                  placeholder="Category (e.g. Pancakes)"
+                  defaultValue={r.noaCategory||''}
+                  key={`cat-${r.id}`}
+                  onBlur={e=>{const v=e.target.value.trim();if(v!==(r.noaCategory||''))dispatch({type:'SAVE_REC',rec:{...r,noaCategory:v},newIngs:[]});}}
+                  onKeyDown={e=>{if(e.key==='Enter')e.target.blur();}}
+                />
+                <input
+                  className="inp"
+                  style={{flex:1,fontSize:11,padding:'3px 7px',height:'auto',textTransform:'uppercase',fontWeight:600,color:'var(--noa)'}}
+                  placeholder="Label (e.g. RP)"
+                  defaultValue={r.noaLabel||''}
+                  key={`lbl-${r.id}`}
+                  onBlur={e=>{const v=e.target.value.trim().toUpperCase();if(v!==(r.noaLabel||''))dispatch({type:'SAVE_REC',rec:{...r,noaLabel:v},newIngs:[]});}}
+                  onKeyDown={e=>{if(e.key==='Enter')e.target.blur();}}
+                />
+              </div>}
             </div>
           </div>
         </div>
@@ -2139,7 +2329,7 @@ function RecipesTab({state,dispatch,showToast}){
           </div>}
           {atpRec.mode==='noa'&&<div style={{display:'flex',gap:6,width:'100%',justifyContent:'flex-end'}}>
             <span style={{fontSize:12,color:'var(--muted)',alignSelf:'center',flex:1}}>Add to Noa's list</span>
-            <button className="btn btn-primary btn-sm"style={{background:'var(--noa)',border:'none'}}onClick={()=>{dispatch({type:'NOA_ADD',item:r.name});showToast(`Added to Noa's list!`);setAtpRec(null);}}>✓ Add to Noa</button>
+            <button className="btn btn-primary btn-sm"style={{background:'var(--noa)',border:'none'}}onClick={()=>{dispatch({type:'NOA_ADD',item:r.name});dispatch({type:'NOA_ROSTER_ADD',recId:r.id});showToast(`Added to Noa's list!`);setAtpRec(null);}}>✓ Add to Noa</button>
           </div>}
           <button className="btn btn-ghost btn-sm"style={{alignSelf:'flex-end'}}onClick={()=>setAtpRec(null)}>✕</button>
         </div>}
@@ -2423,7 +2613,8 @@ function LoginScreen({onSignIn,denied}){
 
 // ── App ─────────────────────────────────────────────────────────────────────
 function App({user,onSignOut}){
-  const[tab,setTab]=useState('mealplan');
+  const isNanny=NANNY_EMAILS.includes(user?.email||'');
+  const[tab,setTab]=useState(()=>NANNY_EMAILS.includes(user?.email||'')?'noa':'mealplan');
   const[state,dispatch]=useReducer(reducer,null);
   const[toast,setToast]=useState(null);
   const[showSync,setShowSync]=useState(false);
@@ -2433,6 +2624,8 @@ function App({user,onSignOut}){
   const saveTimer=useRef(null);
   const fbDbRef=useRef(null);
   const fromFB=useRef(false); // true when state change came from Firebase — skip write-back
+  const fbInitialized=useRef(false); // true after first Firebase value is processed (data or empty)
+  const stateRef=useRef(null); // always-current state for use inside async callbacks
 
 
   // Load from localStorage on mount — clears stale data if DATA_VER changed
@@ -2451,11 +2644,13 @@ function App({user,onSignOut}){
   // Auto-save to localStorage + Firebase
   useEffect(()=>{
     if(!state)return;
+    stateRef.current=state; // keep ref in sync for async callbacks
     if(isFirst.current){isFirst.current=false;return;}
     try{localStorage.setItem('kitchen_local',JSON.stringify(state));localStorage.setItem('kitchen_data_ver',String(DATA_VER));}catch(e){}
     if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;} // always cancel pending write first
     if(fromFB.current){fromFB.current=false;return;} // Firebase update — save to localStorage only, never write back
     if(!fbDbRef.current)return;
+    if(!fbInitialized.current)return; // wait until we've received the first Firebase value before writing
     const stateToWrite=state;
     saveTimer.current=setTimeout(()=>{fbWrite(fbDbRef.current,stateToWrite).catch(e=>console.error('[fbWrite] failed:',e.message));},800);
     return()=>{if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;}};
@@ -2465,6 +2660,7 @@ function App({user,onSignOut}){
   function connectFirebase(url,silent){
     if(!url)return;
     setSyncStatus('connecting');
+    fbInitialized.current=false; // reset — must wait for first Firebase value before writing
     loadFirebaseSDK().then(fb=>{
       try{
         fbStop();
@@ -2477,7 +2673,12 @@ function App({user,onSignOut}){
         fbConnectedRef=db.ref('.info/connected');
         fbConnectedRef.on('value',s=>{setSyncStatus(s.val()===true?'live':'connecting');});
         fbListen(db,ud=>{
-          if(!ud)return;
+          if(!ud){
+            // Firebase is empty — bootstrap it with our local data so partner can sync
+            fbInitialized.current=true;
+            if(stateRef.current)fbWrite(db,stateRef.current).catch(e=>console.error('[fbWrite bootstrap]',e.message));
+            return;
+          }
           setSyncStatus('live');
           try{
             // Build safe mealPlan — Firebase omits empty arrays/objects so we restore them
@@ -2508,9 +2709,11 @@ function App({user,onSignOut}){
               mealPlan:safeMp,
               shopping:{needed:Array.isArray(safeShopping.needed)?safeShopping.needed:[],
                 pickedUp:Array.isArray(safeShopping.pickedUp)?safeShopping.pickedUp:[]},
-              holidays:ud.holidays||{}
+              holidays:ud.holidays||{},
+              noaRoster:Array.isArray(ud.noaRoster)?ud.noaRoster:[]
             };
             fromFB.current=true; // mark so auto-save skips Firebase write-back
+            fbInitialized.current=true; // Firebase had data — safe to write back on future changes
             dispatch({type:'INIT',state:newState});
           }catch(e){console.error('[fbListen] error processing Firebase data:',e);}
         });
@@ -2530,24 +2733,26 @@ function App({user,onSignOut}){
 
   if(!state)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}><span className="spin"/></div>;
 
-  const TABS=[
+  const ALL_TABS=[
     {id:'mealplan',label:'📅 Meal Plan'},
     {id:'needs',label:'👀 Needs?'},
     {id:'shop',label:'🛒 Shop'},
     {id:'recipes',label:'🍴 Recipes'},
     {id:'holidays',label:'📚 Cookbooks'},
+    {id:'noa',label:'🍼 Noa'},
   ];
+  const TABS=isNanny?ALL_TABS.filter(t=>t.id==='noa'):ALL_TABS;
 
   const syncLabel=syncStatus==='live'?'Live':syncStatus==='connecting'?'Connecting…':syncStatus==='error'?'Error':'Sync';
   const dotClass=syncStatus==='live'?'live':syncStatus==='connecting'?'warn':syncStatus==='error'?'err':'off';
 
   return<div id="root">
     <div className="hdr">
-      <div className="hdr-title">🌮 Bo's Kitchen</div>
+      <div className="hdr-title">{isNanny?'🍼 Noa\'s Food':'🌮 Bo\'s Kitchen'}</div>
       <div style={{display:'flex',alignItems:'center',gap:6}}>
-        <button className={`sync-btn${syncStatus==='live'?' sync-live':''}`}onClick={()=>setShowSync(true)}title={syncLabel}>
+        {!isNanny&&<button className={`sync-btn${syncStatus==='live'?' sync-live':''}`}onClick={()=>setShowSync(true)}title={syncLabel}>
           <span className={`sync-dot ${dotClass}`}/>{syncStatus!=='live'&&syncLabel}
-        </button>
+        </button>}
         {onSignOut&&<button onClick={onSignOut}title="Sign out"
           style={{background:'none',border:'none',color:'rgba(240,237,228,.55)',fontSize:18,cursor:'pointer',padding:'4px 6px',lineHeight:1,borderRadius:4,transition:'color .15s'}}
           onMouseEnter={e=>e.target.style.color='rgba(240,237,228,.9)'}
@@ -2570,6 +2775,7 @@ function App({user,onSignOut}){
     {tab==='shop'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='shop'/>}
     {tab==='recipes'&&<RecipesTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {tab==='holidays'&&<HolidaysTab state={state}dispatch={dispatch}showToast={showToast}/>}
+    {tab==='noa'&&<NoaTab state={state}dispatch={dispatch}showToast={showToast}isNanny={isNanny}/>}
     {showSync&&<SyncModal state={state}syncStatus={syncStatus}fbDbUrl={fbDbUrl}
       onSetupFb={url=>{connectFirebase(url);setShowSync(false);showToast('Firebase connected! Changes sync in real-time.');}}
       onApply={merged=>{dispatch({type:'INIT',state:merged});showToast("Partner's changes applied!");}}
