@@ -2855,7 +2855,7 @@ function HolidaysTab({state,dispatch,showToast}){
 // ── Cheese Tab ───────────────────────────────────────────────────────────────
 const CHEESE_TYPES=['Fresh/Unripened','Soft','Semi-soft','Semi-hard','Hard','Blue','Processed'];
 const CHEESE_FLAVORS=['Buttery','Creamy','Earthy','Funky','Mild','Nutty','Savory','Sharp','Smoky','Sweet','Tangy','Pungent'];
-const CHEESE_TEXTURES=['Chewy','Crumbly','Creamy','Firm','Flaky','Gooey','Grainy','Springy','Waxy'];
+const CHEESE_TEXTURES=['Chewy','Crumbly','Creamy','Firm','Flakey','Gooey','Grainy','Springy','Waxy'];
 const CHEESE_RATING_LABELS={0.5:'🫤 Meh',1:'😐 Not great',1.5:'🙂 OK',2:'😊 Fine',2.5:'👍 Decent',3:'🙂 Good',3.5:'😄 Pretty good',4:'😄 Great',4.5:'🤩 Very good',5:'🤩 Amazing!'};
 const COUNTRIES=['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cabo Verde','Cambodia','Cameroon','Canada','Central African Republic','Chad','Chile','China','Colombia','Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','Denmark','Djibouti','Dominica','Dominican Republic','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Kiribati','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','North Macedonia','Norway','Oman','Pakistan','Palau','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino','São Tomé and Príncipe','Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','Solomon Islands','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkey','Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
 
@@ -3086,22 +3086,6 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
         {CHEESE_TYPES.map(t=><option key={t}>{t}</option>)}
       </select>
     </div>
-    <div className="fg"><label className="lbl">Rating</label>
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <CheeseStars value={f.rating} onChange={v=>set('rating',v)} size={26}/>
-        {f.rating>0&&<span style={{fontSize:12,color:'var(--muted)'}}>{CHEESE_RATING_LABELS[f.rating]||''}</span>}
-      </div>
-    </div>
-    <div className="fg"><label className="lbl">Flavor profile</label>
-      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-        {CHEESE_FLAVORS.map(fl=>chip(fl,(f.flavors||[]).includes(fl),()=>toggleArr('flavors',fl)))}
-      </div>
-    </div>
-    <div className="fg"><label className="lbl">Body &amp; texture</label>
-      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-        {CHEESE_TEXTURES.map(tx=>chip(tx,(f.textures||[]).includes(tx),()=>toggleArr('textures',tx)))}
-      </div>
-    </div>
     <div className="fg"><label className="lbl">Where you found it</label>
       <input className="inp" value={f.location} onChange={e=>set('location',e.target.value)} placeholder="e.g. Whole Foods"/>
     </div>
@@ -3121,6 +3105,22 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
         </div>:null;
       })()}
     </div>
+    <div className="fg"><label className="lbl">Rating</label>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <CheeseStars value={f.rating} onChange={v=>set('rating',v)} size={26}/>
+        {f.rating>0&&<span style={{fontSize:12,color:'var(--muted)'}}>{CHEESE_RATING_LABELS[f.rating]||''}</span>}
+      </div>
+    </div>
+    <div className="fg"><label className="lbl">Flavor profile</label>
+      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+        {CHEESE_FLAVORS.map(fl=>chip(fl,(f.flavors||[]).includes(fl),()=>toggleArr('flavors',fl)))}
+      </div>
+    </div>
+    <div className="fg"><label className="lbl">Body &amp; texture</label>
+      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+        {CHEESE_TEXTURES.map(tx=>chip(tx,(f.textures||[]).includes(tx),()=>toggleArr('textures',tx)))}
+      </div>
+    </div>
     <div className="fg"><label className="lbl">Notes</label>
       <textarea className="inp" value={f.notes} onChange={e=>set('notes',e.target.value)} placeholder="Tasting notes, pairings, context…" rows={3}/>
     </div>
@@ -3132,17 +3132,17 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
       <input type="file" accept="image/*" onChange={handlePhoto} style={{fontSize:12,color:'var(--muted)'}}/>
       {uploading&&<span style={{fontSize:11,color:'var(--muted)',marginLeft:6}}>Resizing…</span>}
     </div>
-    <div className="fg" style={{display:'flex',gap:16,alignItems:'center'}}>
-      <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13}}>
-        <input type="checkbox" checked={f.wouldBuyAgain} onChange={e=>set('wouldBuyAgain',e.target.checked)}
-          style={{width:16,height:16,accentColor:'var(--sage)',cursor:'pointer'}}/>
-        Would buy again
-      </label>
-      <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13}}>
-        <input type="checkbox" checked={f.isVegan} onChange={e=>set('isVegan',e.target.checked)}
-          style={{width:16,height:16,accentColor:'var(--sage)',cursor:'pointer'}}/>
-        Vegan
-      </label>
+    <div className="fg">
+      <button type="button"
+        onClick={()=>set('wouldBuyAgain',!f.wouldBuyAgain)}
+        style={{width:'100%',padding:'10px 14px',borderRadius:'var(--r)',border:`2px solid ${f.wouldBuyAgain?'#f59e0b':'var(--border)'}`,
+          background:f.wouldBuyAgain?'#fffbeb':'white',cursor:'pointer',
+          display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+          fontSize:14,fontWeight:f.wouldBuyAgain?700:500,
+          color:f.wouldBuyAgain?'#92400e':'var(--muted)',transition:'all .2s'}}>
+        <span style={{fontSize:20}}>{f.wouldBuyAgain?'🏆':'🧀'}</span>
+        {f.wouldBuyAgain?'Would buy again! ✓':'Would buy again?'}
+      </button>
     </div>
     <div style={{display:'flex',gap:8,marginTop:4,justifyContent:'space-between'}}>
       <div style={{display:'flex',gap:8}}>
