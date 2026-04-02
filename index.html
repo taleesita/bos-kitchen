@@ -449,7 +449,7 @@ function getUserData(state){
   return{v:1,mealPlan:state.mealPlan,shopping:state.shopping,holidays:state.holidays||{},
     customRecipes:(state.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id)),
     customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv,
-    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[]};
+    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[]};
 }
 function encodeSync(state){return btoa(unescape(encodeURIComponent(JSON.stringify(getUserData(state)))));}
 function decodeSync(code,cur){
@@ -462,7 +462,8 @@ function decodeSync(code,cur){
     ingredients:[...seedIngs,...mergeById(myIngs,ud.customIngs||[])],
     mealPlan:ud.mealPlan,shopping:ud.shopping,holidays:ud.holidays||{},
     noaRoster:Array.isArray(ud.noaRoster)?ud.noaRoster:[],
-    cheeses:Array.isArray(ud.cheeses)?ud.cheeses:[]};
+    cheeses:Array.isArray(ud.cheeses)?ud.cheeses:[],
+    customCookbooks:Array.isArray(ud.customCookbooks)?ud.customCookbooks:[]};
 }
 // ── Firebase sync — scripts loaded dynamically so they never block page load ──
 let fbApp=null;
@@ -487,7 +488,7 @@ const NOA_SEED_ROSTER=['noa-r-01','noa-r-02','noa-r-03','noa-r-04','noa-r-05','n
 function buildInitial(){
   return{recipes:window.SEED.recipes,ingredients:window.SEED.ingredients,
     mealPlan:{weekStart:getWeekStart(),days:Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}])),
-    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{},noaRoster:[...NOA_SEED_ROSTER],cheeses:[]};
+    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{},noaRoster:[...NOA_SEED_ROSTER],cheeses:[],customCookbooks:[]};
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -566,6 +567,23 @@ function reducer(state,action){
       const ingredients=state.ingredients.filter(i=>i.id!==action.id);
       const recipes=state.recipes.map(r=>({...r,ingredientRefs:(r.ingredientRefs||[]).filter(ref=>ref.id!==action.id)}));
       return{...state,ingredients,recipes};
+    }
+    case'COOKBOOK_ADD':{
+      const name=action.name.trim();
+      if(!name||(state.customCookbooks||[]).includes(name))return state;
+      return{...state,customCookbooks:[...(state.customCookbooks||[]),name]};
+    }
+    case'COOKBOOK_DEL':{
+      // Remove cookbook name from customCookbooks AND strip it from all recipes
+      const n=action.name;
+      const recipes=state.recipes.map(r=>{
+        const holiday=r.holiday===n?'':r.holiday;
+        const tags=(r.tags||[]).filter(t=>t!==n);
+        return{...r,holiday,tags};
+      });
+      const customCookbooks=(state.customCookbooks||[]).filter(c=>c!==n);
+      const holidays={...state.holidays};delete holidays[n];
+      return{...state,recipes,customCookbooks,holidays};
     }
     case'CHEESE_SAVE':{
       const existing=(state.cheeses||[]).find(c=>c.id===action.cheese.id);
@@ -2048,6 +2066,145 @@ function ShoppingTab({state,dispatch,showToast,phase}){
 }
 
 // ── Manage Ingredients Modal ──────────────────────────────────────────────────
+// ── Settings Modal ────────────────────────────────────────────────────────────
+function SettingsModal({state,dispatch,showToast,onClose}){
+  const[section,setSection]=useState('cookbooks'); // 'cookbooks'|'ingredients'
+  const[newCb,setNewCb]=useState('');
+  const[ingSearch,setIngSearch]=useState('');
+  const[ingEditing,setIngEditing]=useState(null);
+
+  // Derive all known cookbook names: COOKBOOK_EMOJIS + recipe tags/holidays + customCookbooks
+  const allCookbooks=useMemo(()=>{
+    const names=new Set([
+      ...Object.keys(COOKBOOK_EMOJIS),
+      ...(state.recipes||[]).map(r=>r.holiday).filter(Boolean),
+      ...(state.recipes||[]).flatMap(r=>r.tags||[]).filter(Boolean),
+      ...(state.customCookbooks||[])
+    ]);
+    return [...names].sort((a,b)=>a.localeCompare(b));
+  },[state.recipes,state.customCookbooks]);
+
+  const cbCounts=useMemo(()=>{
+    const c={};
+    for(const h of allCookbooks){
+      c[h]=(state.recipes||[]).filter(r=>r.holiday===h||(r.tags||[]).includes(h)).length;
+    }
+    return c;
+  },[allCookbooks,state.recipes]);
+
+  // Cookbooks that only exist because the user added them (no recipes yet)
+  const isUserAdded=name=>(state.customCookbooks||[]).includes(name)&&!cbCounts[name];
+
+  function addCookbook(){
+    const name=newCb.trim();
+    if(!name)return;
+    if(allCookbooks.includes(name)){showToast('That cookbook already exists');return;}
+    dispatch({type:'COOKBOOK_ADD',name});
+    showToast(`"${name}" added to cookbooks`);
+    setNewCb('');
+  }
+
+  function deleteCookbook(name){
+    const count=cbCounts[name]||0;
+    const msg=count>0
+      ?`Remove "${name}" from all ${count} recipe${count!==1?'s':''}? This cannot be undone.`
+      :`Delete cookbook "${name}"?`;
+    if(!window.confirm(msg))return;
+    dispatch({type:'COOKBOOK_DEL',name});
+    showToast(`"${name}" removed`);
+  }
+
+  // Ingredients section
+  const sortedIngs=useMemo(()=>[...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)),[state.ingredients]);
+  const filteredIngs=useMemo(()=>{
+    const q=ingSearch.toLowerCase();
+    return sortedIngs.filter(i=>i.name.toLowerCase().includes(q));
+  },[sortedIngs,ingSearch]);
+
+  return<div className="overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div className="modal" style={{maxHeight:'90vh',display:'flex',flexDirection:'column'}}>
+      <div className="mhdr">
+        <div className="mtitle">⚙️ Settings</div>
+        <button className="mclose" onClick={onClose}>×</button>
+      </div>
+
+      {/* Section tabs */}
+      <div style={{display:'flex',borderBottom:'1px solid var(--border)',marginBottom:12,flexShrink:0}}>
+        {[['cookbooks','📚 Cookbooks'],['ingredients','🥕 Ingredients']].map(([id,label])=>
+          <button key={id} onClick={()=>setSection(id)}
+            style={{flex:1,padding:'8px 0',fontSize:13,fontWeight:section===id?700:500,
+              background:'none',border:'none',borderBottom:`2px solid ${section===id?'var(--sage)':'transparent'}`,
+              color:section===id?'var(--sage-dark)':'var(--muted)',cursor:'pointer',transition:'all .15s'}}>
+            {label}
+          </button>)}
+      </div>
+
+      <div style={{overflowY:'auto',flex:1}}>
+        {/* ── Cookbooks ── */}
+        {section==='cookbooks'&&<>
+          <div style={{display:'flex',gap:6,marginBottom:12}}>
+            <input className="inp" value={newCb} onChange={e=>setNewCb(e.target.value)}
+              placeholder="New cookbook name…" style={{flex:1}}
+              onKeyDown={e=>{if(e.key==='Enter')addCookbook();}}/>
+            <button className="btn btn-primary btn-sm" onClick={addCookbook} disabled={!newCb.trim()}>Add</button>
+          </div>
+          <div style={{fontSize:11,color:'var(--muted)',marginBottom:8}}>
+            {allCookbooks.length} cookbooks · Click 🗑 to remove (will untag from all recipes)
+          </div>
+          {allCookbooks.map(name=>{
+            const count=cbCounts[name]||0;
+            const emoji=COOKBOOK_EMOJIS[name];
+            return<div key={name} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderBottom:'1px solid var(--border)'}}>
+              <span style={{fontSize:16,width:22,textAlign:'center'}}>{emoji||'📌'}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:500}}>{name}</div>
+                <div style={{fontSize:10,color:'var(--muted)'}}>{count>0?`${count} recipe${count!==1?'s':''}`:'No recipes yet'}</div>
+              </div>
+              <button className="btn btn-sm" title="Remove cookbook"
+                style={{background:'var(--cream)',border:'1px solid var(--border)',color:'var(--muted)',flexShrink:0,padding:'4px 8px'}}
+                onClick={()=>deleteCookbook(name)}>🗑</button>
+            </div>;
+          })}
+        </>}
+
+        {/* ── Ingredients ── */}
+        {section==='ingredients'&&<>
+          <div className="fg" style={{marginBottom:8}}>
+            <input className="inp" value={ingSearch} onChange={e=>setIngSearch(e.target.value)}
+              placeholder="Search ingredients…" autoFocus/>
+          </div>
+          {filteredIngs.map(ing=>{
+            const recCount=(state.recipes||[]).filter(r=>(r.ingredientRefs||[]).some(ref=>ref.id===ing.id)).length;
+            if(ingEditing?.id===ing.id){
+              return<div key={ing.id} style={{display:'flex',gap:5,padding:'7px 0',borderBottom:'1px solid var(--border)',alignItems:'center',flexWrap:'wrap'}}>
+                <input className="inp" value={ingEditing.name} onChange={e=>setIngEditing(v=>({...v,name:e.target.value}))} style={{flex:'1 1 120px'}}/>
+                <select className="inp" value={ingEditing.store||''} onChange={e=>setIngEditing(v=>({...v,store:e.target.value}))} style={{width:'auto'}}>
+                  <option value="">Store?</option>
+                  <option>Trader Joe's</option><option>Whole Foods</option><option>Other</option>
+                </select>
+                <button className="btn btn-primary btn-sm" onClick={()=>{dispatch({type:'SAVE_ING',ing:ingEditing});showToast(`"${ingEditing.name}" updated!`);setIngEditing(null);}}>✓</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setIngEditing(null)}>✕</button>
+              </div>;
+            }
+            return<div key={ing.id} style={{display:'flex',gap:6,padding:'7px 0',borderBottom:'1px solid var(--border)',alignItems:'center'}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ing.name}</div>
+                <div style={{fontSize:10,color:'var(--muted)'}}>{[ing.store,recCount?`${recCount} recipe${recCount!==1?'s':''}`:''].filter(Boolean).join(' · ')}</div>
+              </div>
+              <button className="btn btn-icon" style={{padding:'5px 8px'}} onClick={()=>setIngEditing({...ing})}>
+                <span style={{display:'inline-block',transform:'scaleX(-1)',fontSize:16,lineHeight:1}}>✏️</span>
+              </button>
+              <button className="btn btn-sm" style={{background:'var(--red)',color:'white',flexShrink:0}}
+                onClick={()=>{if(window.confirm(`Delete "${ing.name}"? It will be removed from all recipes.`)){dispatch({type:'DEL_ING',id:ing.id});showToast('Ingredient deleted.');}}}>✕</button>
+            </div>;
+          })}
+          {filteredIngs.length===0&&<div style={{color:'var(--muted)',textAlign:'center',padding:16,fontSize:13}}>No ingredients found</div>}
+        </>}
+      </div>
+    </div>
+  </div>;
+}
+
 function ManageIngsModal({ingredients,recipes,onSave,onDelete,onClose}){
   const[search,setSearch]=useState('');
   const[editing,setEditing]=useState(null);
@@ -2657,6 +2814,8 @@ function HolidaysTab({state,dispatch,showToast}){
 const CHEESE_TYPES=['Fresh/Unripened','Soft','Semi-soft','Semi-hard','Hard','Blue','Processed'];
 const CHEESE_FLAVORS=['Buttery','Creamy','Earthy','Funky','Mild','Nutty','Savory','Sharp','Smoky','Sweet','Tangy','Pungent'];
 const CHEESE_TEXTURES=['Chewy','Crumbly','Creamy','Firm','Flaky','Gooey','Grainy','Springy','Waxy'];
+const CHEESE_RATING_LABELS={0.5:'🫤 Meh',1:'😐 Not great',1.5:'🙂 OK',2:'😊 Fine',2.5:'👍 Decent',3:'🙂 Good',3.5:'😄 Pretty good',4:'😄 Great',4.5:'🤩 Very good',5:'🤩 Amazing!'};
+const COUNTRIES=['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cabo Verde','Cambodia','Cameroon','Canada','Central African Republic','Chad','Chile','China','Colombia','Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','Denmark','Djibouti','Dominica','Dominican Republic','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Kiribati','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','North Macedonia','Norway','Oman','Pakistan','Palau','Palestine','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino','São Tomé and Príncipe','Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','Solomon Islands','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkey','Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
 
 function resizeImageToDataURL(file,maxPx,quality){
   return new Promise(res=>{
@@ -2675,15 +2834,182 @@ function resizeImageToDataURL(file,maxPx,quality){
   });
 }
 
+// Half-star rating display + interaction
 function CheeseStars({value,onChange,size}){
   const[hover,setHover]=useState(0);
-  return<div style={{display:'flex',gap:2}}>
-    {[1,2,3,4,5].map(n=><button key={n}type="button"
-      style={{background:'none',border:'none',fontSize:size||20,cursor:onChange?'pointer':'default',padding:'0 1px',lineHeight:1,
-        color:n<=(hover||value)?'#e8a84a':'#d5cfc5',transition:'color .1s'}}
-      onMouseEnter={()=>onChange&&setHover(n)}
-      onMouseLeave={()=>onChange&&setHover(0)}
-      onClick={()=>onChange&&onChange(n)}>★</button>)}
+  const display=hover||value||0;
+  function fill(n){
+    if(display>=n)return'100%';
+    if(display>=n-0.5)return'50%';
+    return'0%';
+  }
+  return<div style={{display:'flex',gap:1,alignItems:'center'}}>
+    {[1,2,3,4,5].map(n=><div key={n}
+      style={{position:'relative',fontSize:size||20,lineHeight:1,width:'1.1em',cursor:onChange?'pointer':'default',userSelect:'none'}}
+      onMouseMove={onChange?(e)=>{const r=e.currentTarget.getBoundingClientRect();setHover((e.clientX-r.left)<r.width/2?n-0.5:n);}:undefined}
+      onMouseLeave={onChange?()=>setHover(0):undefined}
+      onClick={onChange?(e)=>{const r=e.currentTarget.getBoundingClientRect();onChange((e.clientX-r.left)<r.width/2?n-0.5:n);}:undefined}>
+      <span style={{color:'#d5cfc5'}}>★</span>
+      <span style={{position:'absolute',left:0,top:0,overflow:'hidden',width:fill(n),color:'#e8a84a',pointerEvents:'none'}}>★</span>
+    </div>)}
+  </div>;
+}
+
+// Barcode scanner modal
+function BarcodeScanner({onResult,onClose}){
+  const videoRef=useRef(null);
+  const streamRef=useRef(null);
+  const animRef=useRef(null);
+  const detRef=useRef(null);
+  const[phase,setPhase]=useState('init'); // init|scanning|found|lookup|notfound|unsupported|error|manual
+  const[result,setResult]=useState(null); // {name,origin,barcode}
+  const[manualCode,setManualCode]=useState('');
+  const[editName,setEditName]=useState('');
+  const[editOrigin,setEditOrigin]=useState('');
+
+  useEffect(()=>{
+    if(!('BarcodeDetector' in window)){setPhase('unsupported');return;}
+    detRef.current=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf']});
+    startCamera();
+    return()=>stopCamera();
+  },[]);
+
+  async function startCamera(){
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+      streamRef.current=stream;
+      if(videoRef.current){videoRef.current.srcObject=stream;await videoRef.current.play();}
+      setPhase('scanning');
+      scanLoop();
+    }catch(e){setPhase('error');}
+  }
+
+  function stopCamera(){
+    cancelAnimationFrame(animRef.current);
+    streamRef.current?.getTracks().forEach(t=>t.stop());
+    streamRef.current=null;
+  }
+
+  async function scanLoop(){
+    if(!videoRef.current||videoRef.current.readyState<2){
+      animRef.current=requestAnimationFrame(scanLoop);return;
+    }
+    try{
+      const codes=await detRef.current.detect(videoRef.current);
+      if(codes.length>0){
+        stopCamera();
+        await doLookup(codes[0].rawValue);
+        return;
+      }
+    }catch(e){}
+    animRef.current=requestAnimationFrame(scanLoop);
+  }
+
+  async function doLookup(barcode){
+    setManualCode(barcode);
+    setPhase('lookup');
+    try{
+      const res=await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const data=await res.json();
+      if(data.status===1){
+        const p=data.product;
+        const name=(p.product_name_en||p.product_name||p.generic_name_en||p.generic_name||'').trim();
+        const origin=(p.origins_en||p.origins||'').split(',')[0].trim();
+        setEditName(name);setEditOrigin(origin);
+        setResult({name,origin,barcode});setPhase('found');
+      }else{setPhase('notfound');}
+    }catch(e){setPhase('notfound');}
+  }
+
+  function accept(){
+    onResult({name:editName.trim(),origin:editOrigin.trim()});
+    onClose();
+  }
+
+  const overlay={position:'fixed',inset:0,background:'rgba(0,0,0,.7)',zIndex:500,display:'flex',alignItems:'center',justifyContent:'center',padding:16};
+  const box={background:'white',borderRadius:12,padding:20,width:'100%',maxWidth:420,maxHeight:'90vh',overflowY:'auto'};
+
+  return<div style={overlay} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div style={box}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <strong style={{fontSize:15}}>📷 Scan barcode</strong>
+        <button className="btn-icon" onClick={onClose} style={{fontSize:18}}>✕</button>
+      </div>
+
+      {/* Camera view */}
+      {(phase==='scanning'||phase==='init')&&<>
+        <div style={{position:'relative',borderRadius:8,overflow:'hidden',background:'#000',aspectRatio:'4/3',marginBottom:12}}>
+          <video ref={videoRef} style={{width:'100%',height:'100%',objectFit:'cover'}} playsInline muted/>
+          {/* Viewfinder overlay */}
+          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+            <div style={{width:'65%',height:'35%',border:'2px solid rgba(255,255,255,.8)',borderRadius:6,boxShadow:'0 0 0 2000px rgba(0,0,0,.35)'}}/>
+          </div>
+        </div>
+        <p style={{fontSize:12,color:'var(--muted)',textAlign:'center',marginBottom:8}}>Hold a barcode in the frame</p>
+      </>}
+
+      {phase==='lookup'&&<div style={{textAlign:'center',padding:'24px 0'}}>
+        <span className="spin"/>
+        <p style={{marginTop:8,fontSize:13,color:'var(--muted)'}}>Looking up barcode {manualCode}…</p>
+      </div>}
+
+      {phase==='found'&&<>
+        <div style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:8,padding:12,marginBottom:12}}>
+          <p style={{fontSize:11,color:'#166534',fontWeight:600,marginBottom:6}}>✓ Found! Edit if needed:</p>
+          <div className="fg"><label className="lbl">Cheese name</label>
+            <input className="inp" value={editName} onChange={e=>setEditName(e.target.value)} placeholder="Name from barcode"/>
+          </div>
+          <div className="fg" style={{marginBottom:0}}><label className="lbl">Origin</label>
+            <input className="inp" value={editOrigin} onChange={e=>setEditOrigin(e.target.value)} placeholder="Country of origin"/>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn btn-primary" style={{flex:1}} onClick={accept}>Use this →</button>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        </div>
+      </>}
+
+      {phase==='notfound'&&<>
+        <div style={{background:'#fef9c3',border:'1px solid #fde68a',borderRadius:8,padding:12,marginBottom:12,fontSize:13}}>
+          <p style={{fontWeight:600,marginBottom:2}}>Barcode not in database</p>
+          <p style={{color:'var(--muted)',fontSize:12}}>Code: {manualCode}. Fill in the name yourself after closing.</p>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button className="btn btn-primary" style={{flex:1}} onClick={()=>onResult({name:'',origin:'',barcode:manualCode})&&onClose()}>Continue anyway</button>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        </div>
+      </>}
+
+      {phase==='unsupported'&&<>
+        <p style={{fontSize:13,marginBottom:12,color:'var(--muted)'}}>Live scanning needs Chrome. Enter a barcode manually to look it up:</p>
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <input className="inp" value={manualCode} onChange={e=>setManualCode(e.target.value)} placeholder="e.g. 3760020510622" style={{flex:1}}/>
+          <button className="btn btn-primary btn-sm" onClick={()=>doLookup(manualCode)} disabled={!manualCode.trim()}>Look up</button>
+        </div>
+        {phase==='found'&&<div style={{marginTop:8}}>
+          <div className="fg"><label className="lbl">Name</label><input className="inp" value={editName} onChange={e=>setEditName(e.target.value)}/></div>
+          <div className="fg" style={{marginBottom:8}}><label className="lbl">Origin</label><input className="inp" value={editOrigin} onChange={e=>setEditOrigin(e.target.value)}/></div>
+          <button className="btn btn-primary" onClick={accept}>Use this →</button>
+        </div>}
+      </>}
+
+      {phase==='error'&&<>
+        <p style={{fontSize:13,color:'var(--red)',marginBottom:12}}>Camera access denied. Enter a barcode number to look it up:</p>
+        <div style={{display:'flex',gap:8,marginBottom:8}}>
+          <input className="inp" value={manualCode} onChange={e=>setManualCode(e.target.value)} placeholder="Barcode number" style={{flex:1}}/>
+          <button className="btn btn-primary btn-sm" onClick={()=>doLookup(manualCode)} disabled={!manualCode.trim()}>Look up</button>
+        </div>
+      </>}
+
+      {/* Manual lookup always visible at bottom when not already in found/lookup state */}
+      {!['found','lookup','notfound'].includes(phase)&&phase!=='unsupported'&&phase!=='error'&&<div style={{marginTop:12,borderTop:'1px solid var(--border)',paddingTop:10}}>
+        <p style={{fontSize:11,color:'var(--muted)',marginBottom:6}}>Or type a barcode number:</p>
+        <div style={{display:'flex',gap:8}}>
+          <input className="inp" value={manualCode} onChange={e=>setManualCode(e.target.value)} placeholder="Barcode number" style={{flex:1,fontSize:12}}/>
+          <button className="btn btn-secondary btn-sm" onClick={()=>{stopCamera();doLookup(manualCode);}} disabled={!manualCode.trim()}>Look up</button>
+        </div>
+      </div>}
+    </div>
   </div>;
 }
 
@@ -2692,6 +3018,7 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
     rating:0,flavors:[],textures:[],location:'',origin:'',notes:'',isVegan:false,wouldBuyAgain:false,photo:null};
   const[f,setF]=useState(cheese?{...blank,...cheese}:blank);
   const[uploading,setUploading]=useState(false);
+  const[showScanner,setShowScanner]=useState(false);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const toggleArr=(k,v)=>set(k,f[k].includes(v)?f[k].filter(x=>x!==v):[...f[k],v]);
   async function handlePhoto(e){
@@ -2711,8 +3038,17 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
       background:active?'var(--sage)':'white',borderColor:active?'var(--sage)':'var(--border)',
       color:active?'white':'var(--text)',fontWeight:active?600:400}}>{label}</button>;
   return<div>
-    <div className="fg"><label className="lbl">Cheese name *</label>
-      <input className="inp" value={f.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. Époisses de Bourgogne" autoFocus/>
+    {showScanner&&<BarcodeScanner
+      onResult={({name,origin})=>{if(name)set('name',name);if(origin)set('origin',origin);}}
+      onClose={()=>setShowScanner(false)}/>}
+    <div className="fg">
+      <label className="lbl">Cheese name *</label>
+      <div style={{display:'flex',gap:6}}>
+        <input className="inp" value={f.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. Époisses de Bourgogne" style={{flex:1}}/>
+        <button type="button" className="btn btn-secondary btn-sm"
+          style={{flexShrink:0,padding:'7px 10px',whiteSpace:'nowrap'}}
+          onClick={()=>setShowScanner(true)} title="Scan barcode">📷 Scan</button>
+      </div>
     </div>
     <div className="row2">
       <div className="fg"><label className="lbl">Date tried</label>
@@ -2728,17 +3064,17 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
     <div className="fg"><label className="lbl">Rating</label>
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <CheeseStars value={f.rating} onChange={v=>set('rating',v)} size={26}/>
-        {f.rating>0&&<span style={{fontSize:12,color:'var(--muted)'}}>{['','🫤 Meh','😐 Fine','🙂 Good','😄 Great','🤩 Amazing'][f.rating]}</span>}
+        {f.rating>0&&<span style={{fontSize:12,color:'var(--muted)'}}>{CHEESE_RATING_LABELS[f.rating]||''}</span>}
       </div>
     </div>
     <div className="fg"><label className="lbl">Flavor profile</label>
       <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-        {CHEESE_FLAVORS.map(fl=>chip(fl,f.flavors.includes(fl),()=>toggleArr('flavors',fl)))}
+        {CHEESE_FLAVORS.map(fl=>chip(fl,(f.flavors||[]).includes(fl),()=>toggleArr('flavors',fl)))}
       </div>
     </div>
     <div className="fg"><label className="lbl">Body &amp; texture</label>
       <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-        {CHEESE_TEXTURES.map(tx=>chip(tx,f.textures.includes(tx),()=>toggleArr('textures',tx)))}
+        {CHEESE_TEXTURES.map(tx=>chip(tx,(f.textures||[]).includes(tx),()=>toggleArr('textures',tx)))}
       </div>
     </div>
     <div className="row2">
@@ -2746,7 +3082,10 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
         <input className="inp" value={f.location} onChange={e=>set('location',e.target.value)} placeholder="e.g. Whole Foods"/>
       </div>
       <div className="fg"><label className="lbl">Origin</label>
-        <input className="inp" value={f.origin} onChange={e=>set('origin',e.target.value)} placeholder="e.g. France"/>
+        <select className="inp" value={f.origin} onChange={e=>set('origin',e.target.value)}>
+          <option value="">— country —</option>
+          {COUNTRIES.map(c=><option key={c}>{c}</option>)}
+        </select>
       </div>
     </div>
     <div className="fg"><label className="lbl">Notes</label>
@@ -2817,7 +3156,7 @@ function CheeseCard({cheese,onEdit}){
       {expanded&&<div style={{marginTop:6,borderTop:'1px solid var(--border)',paddingTop:8}}>
         {cheese.flavors?.length>0&&<div style={{marginBottom:4}}>
           <span style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.4}}>Flavors </span>
-          {cheese.flavors.map(f=><span key={f} style={{fontSize:11,background:'var(--cream)',border:'1px solid var(--border)',borderRadius:10,padding:'1px 7px',marginRight:4}}>{f}</span>)}
+          {cheese.flavors.map(fl=><span key={fl} style={{fontSize:11,background:'var(--cream)',border:'1px solid var(--border)',borderRadius:10,padding:'1px 7px',marginRight:4}}>{fl}</span>)}
         </div>}
         {cheese.textures?.length>0&&<div style={{marginBottom:4}}>
           <span style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.4}}>Texture </span>
@@ -2848,7 +3187,7 @@ function CheeseStats({cheeses}){
         {emoji:'🧀',label:'Total logged',val:cheeses.length},
         {emoji:'⭐',label:'Avg rating',val:avgRating?`${avgRating}/5`:'—'},
         {emoji:'💚',label:'Would buy again',val:wouldBuyAgain},
-        {emoji:'🌱',label:'Vegan',val:cheeses.filter(c=>c.isVegan).length},
+        {emoji:'🗺️',label:'Countries',val:new Set(cheeses.map(c=>c.origin).filter(Boolean)).size},
       ].map(s=><div key={s.label} className="card" style={{textAlign:'center',padding:'12px 8px'}}>
         <div style={{fontSize:24,marginBottom:2}}>{s.emoji}</div>
         <div style={{fontSize:22,fontWeight:700,color:'var(--sage-dark)'}}>{s.val}</div>
@@ -2858,7 +3197,10 @@ function CheeseStats({cheeses}){
     {topCheese&&<div className="card" style={{marginBottom:10,background:'#fffbeb',borderColor:'#fde68a'}}>
       <div style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.4,marginBottom:4}}>Top rated</div>
       <div style={{fontWeight:700,fontSize:15}}>{topCheese.name}</div>
-      <CheeseStars value={topCheese.rating} size={14}/>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2}}>
+        <CheeseStars value={topCheese.rating} size={14}/>
+        <span style={{fontSize:12,color:'var(--muted)'}}>{CHEESE_RATING_LABELS[topCheese.rating]||''}</span>
+      </div>
     </div>}
     {sortedTypes.length>0&&<div className="card" style={{marginBottom:10}}>
       <div style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.4,marginBottom:8}}>By type</div>
@@ -2887,7 +3229,7 @@ function CheeseStats({cheeses}){
 
 function CheeseTab({state,dispatch,showToast}){
   const[sub,setSub]=useState('log');
-  const[editing,setEditing]=useState(null); // null=none, false=new form, or cheese obj
+  const[editing,setEditing]=useState(null);
   const[search,setSearch]=useState('');
   const[typeFilter,setTypeFilter]=useState('');
   const[sort,setSort]=useState('date');
@@ -2904,7 +3246,6 @@ function CheeseTab({state,dispatch,showToast}){
     showToast(c?`${c.name} deleted`:'Deleted');
     setEditing(null);
   }
-  // Filter + sort
   const filtered=cheeses.filter(c=>{
     if(search&&!c.name.toLowerCase().includes(search.toLowerCase()))return false;
     if(typeFilter&&c.cheeseType!==typeFilter)return false;
@@ -2912,11 +3253,10 @@ function CheeseTab({state,dispatch,showToast}){
   }).sort((a,b)=>{
     if(sort==='rating')return(b.rating||0)-(a.rating||0);
     if(sort==='name')return a.name.localeCompare(b.name);
-    return(b.dateTried||'')>(a.dateTried||'')?1:-1; // newest first
+    return(b.dateTried||'')>(a.dateTried||'')?1:-1;
   });
   const usedTypes=[...new Set(cheeses.map(c=>c.cheeseType).filter(Boolean))].sort();
   return<div className="content">
-    {/* Subtab nav */}
     <div style={{display:'flex',gap:0,marginBottom:14,background:'white',border:'1px solid var(--border)',borderRadius:'var(--r)',overflow:'hidden'}}>
       {[['log','📋 Log'],['add','➕ Add'],['stats','📊 Stats']].map(([id,label])=><button key={id}
         style={{flex:1,padding:'9px 0',fontSize:13,fontWeight:sub===id?700:500,
@@ -2927,7 +3267,6 @@ function CheeseTab({state,dispatch,showToast}){
       </button>)}
     </div>
 
-    {/* Log subtab */}
     {sub==='log'&&<>
       {cheeses.length===0?<div style={{textAlign:'center',padding:'48px 20px',color:'var(--muted)'}}>
         <div style={{fontSize:56,marginBottom:10}}>🧀</div>
@@ -2953,7 +3292,6 @@ function CheeseTab({state,dispatch,showToast}){
       </>}
     </>}
 
-    {/* Add / Edit subtab */}
     {sub==='add'&&<>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <h3 style={{fontSize:15,fontWeight:700}}>{editing?`Editing: ${editing.name}`:'Log a new cheese'}</h3>
@@ -2967,10 +3305,8 @@ function CheeseTab({state,dispatch,showToast}){
         onCancel={()=>{setEditing(null);setSub(cheeses.length?'log':'log');}}/>
     </>}
 
-    {/* Stats subtab */}
     {sub==='stats'&&<CheeseStats cheeses={cheeses}/>}
 
-    {/* FAB — Log button visible on Log tab */}
     {sub==='log'&&cheeses.length>0&&<button className="btn btn-primary"
       style={{position:'fixed',bottom:24,right:20,borderRadius:24,padding:'10px 18px',boxShadow:'0 4px 12px rgba(0,0,0,.2)',fontSize:14,zIndex:50}}
       onClick={()=>{setEditing(false);setSub('add');}}>
@@ -3061,6 +3397,7 @@ function App({user,onSignOut}){
   const[state,dispatch]=useReducer(reducer,null);
   const[toast,setToast]=useState(null);
   const[showSync,setShowSync]=useState(false);
+  const[showSettings,setShowSettings]=useState(false);
   const[fbDbUrl,setFbDbUrl]=useState(()=>localStorage.getItem('kitchen_fb_url')||'https://bo-s-kitchen-default-rtdb.firebaseio.com/');
   const[syncStatus,setSyncStatus]=useState('off'); // off | connecting | live | error
   const isFirst=useRef(true);
@@ -3176,7 +3513,8 @@ function App({user,onSignOut}){
               holidays:ud.holidays||{},
               // Always include the Noa seed roster so pre-loaded recipes appear on all devices
               noaRoster:[...new Set([...NOA_SEED_ROSTER,...(Array.isArray(ud.noaRoster)?ud.noaRoster:[])])],
-              cheeses:Array.isArray(ud.cheeses)?ud.cheeses:[]
+              cheeses:Array.isArray(ud.cheeses)?ud.cheeses:[],
+              customCookbooks:Array.isArray(ud.customCookbooks)?ud.customCookbooks:[]
             };
             fromFB.current=true; // mark so auto-save skips Firebase write-back
             fbInitialized.current=true; // Firebase had data — safe to write back on future changes
@@ -3204,7 +3542,6 @@ function App({user,onSignOut}){
     {id:'needs',label:'👀 Needs?'},
     {id:'shop',label:'🛒 Shop'},
     {id:'recipes',label:'🍴 Recipes'},
-    {id:'holidays',label:'📚 Cookbooks'},
     {id:'noa',label:'🍼 Noa'},
     {id:'cheese',label:'🧀 Cheese'},
   ];
@@ -3220,6 +3557,10 @@ function App({user,onSignOut}){
         {!isNanny&&<button className={`sync-btn${syncStatus==='live'?' sync-live':''}`}onClick={()=>setShowSync(true)}title={syncLabel}>
           <span className={`sync-dot ${dotClass}`}/>{syncStatus!=='live'&&syncLabel}
         </button>}
+        {!isNanny&&<button onClick={()=>setShowSettings(true)} title="Settings"
+          style={{background:'none',border:'none',color:'rgba(240,237,228,.6)',fontSize:17,cursor:'pointer',padding:'4px 5px',lineHeight:1,borderRadius:4,transition:'color .15s',position:'relative',zIndex:1}}
+          onMouseEnter={e=>e.target.style.color='rgba(240,237,228,.95)'}
+          onMouseLeave={e=>e.target.style.color='rgba(240,237,228,.6)'}>⚙️</button>}
         {onSignOut&&<button onClick={onSignOut}title="Sign out"
           style={{background:'none',border:'none',color:'rgba(240,237,228,.55)',fontSize:18,cursor:'pointer',padding:'4px 6px',lineHeight:1,borderRadius:4,transition:'color .15s'}}
           onMouseEnter={e=>e.target.style.color='rgba(240,237,228,.9)'}
@@ -3244,6 +3585,7 @@ function App({user,onSignOut}){
     {tab==='holidays'&&<HolidaysTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {tab==='noa'&&<NoaTab state={state}dispatch={dispatch}showToast={showToast}isNanny={isNanny}/>}
     {tab==='cheese'&&<CheeseTab state={state}dispatch={dispatch}showToast={showToast}/>}
+    {showSettings&&<SettingsModal state={state}dispatch={dispatch}showToast={showToast}onClose={()=>setShowSettings(false)}/>}
     {showSync&&<SyncModal state={state}syncStatus={syncStatus}fbDbUrl={fbDbUrl}
       onSetupFb={url=>{connectFirebase(url);setShowSync(false);showToast('Firebase connected! Changes sync in real-time.');}}
       onApply={merged=>{dispatch({type:'INIT',state:merged});showToast("Partner's changes applied!");}}
