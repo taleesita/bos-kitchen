@@ -3075,16 +3075,14 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
           onClick={()=>setShowScanner(true)} title="Scan barcode">📷 Scan</button>
       </div>
     </div>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10}}>
-      <div className="fg"><label className="lbl">Date tried</label>
-        <input className="inp" type="date" value={f.dateTried} onChange={e=>set('dateTried',e.target.value)}/>
-      </div>
-      <div className="fg"><label className="lbl">Type</label>
-        <select className="inp" value={f.cheeseType} onChange={e=>set('cheeseType',e.target.value)}>
-          <option value="">— pick one —</option>
-          {CHEESE_TYPES.map(t=><option key={t}>{t}</option>)}
-        </select>
-      </div>
+    <div className="fg"><label className="lbl">Date tried</label>
+      <input className="inp" type="date" value={f.dateTried} onChange={e=>set('dateTried',e.target.value)}/>
+    </div>
+    <div className="fg"><label className="lbl">Type</label>
+      <select className="inp" value={f.cheeseType} onChange={e=>set('cheeseType',e.target.value)}>
+        <option value="">— pick one —</option>
+        {CHEESE_TYPES.map(t=><option key={t}>{t}</option>)}
+      </select>
     </div>
     <div className="fg"><label className="lbl">Rating</label>
       <div style={{display:'flex',alignItems:'center',gap:8}}>
