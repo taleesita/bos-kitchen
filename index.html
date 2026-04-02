@@ -2857,7 +2857,7 @@ const CHEESE_TYPES=['Fresh/Unripened','Soft','Semi-soft','Semi-hard','Hard','Blu
 const CHEESE_FLAVORS=['Buttery','Creamy','Earthy','Funky','Mild','Nutty','Savory','Sharp','Smoky','Sweet','Tangy','Pungent'];
 const CHEESE_TEXTURES=['Chewy','Crumbly','Creamy','Firm','Flaky','Gooey','Grainy','Springy','Waxy'];
 const CHEESE_RATING_LABELS={0.5:'🫤 Meh',1:'😐 Not great',1.5:'🙂 OK',2:'😊 Fine',2.5:'👍 Decent',3:'🙂 Good',3.5:'😄 Pretty good',4:'😄 Great',4.5:'🤩 Very good',5:'🤩 Amazing!'};
-const COUNTRIES=['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cabo Verde','Cambodia','Cameroon','Canada','Central African Republic','Chad','Chile','China','Colombia','Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','Denmark','Djibouti','Dominica','Dominican Republic','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Kiribati','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','North Macedonia','Norway','Oman','Pakistan','Palau','Palestine','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino','São Tomé and Príncipe','Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','Solomon Islands','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkey','Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
+const COUNTRIES=['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cabo Verde','Cambodia','Cameroon','Canada','Central African Republic','Chad','Chile','China','Colombia','Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','Denmark','Djibouti','Dominica','Dominican Republic','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Kiribati','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','North Macedonia','Norway','Oman','Pakistan','Palau','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino','São Tomé and Príncipe','Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','Solomon Islands','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkey','Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
 
 function resizeImageToDataURL(file,maxPx,quality){
   return new Promise(res=>{
@@ -3044,6 +3044,8 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
   const[f,setF]=useState(cheese?{...blank,...cheese}:blank);
   const[uploading,setUploading]=useState(false);
   const[showScanner,setShowScanner]=useState(false);
+  const[originQ,setOriginQ]=useState(f.origin||'');
+  const[originDd,setOriginDd]=useState(false);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const toggleArr=(k,v)=>set(k,f[k].includes(v)?f[k].filter(x=>x!==v):[...f[k],v]);
   async function handlePhoto(e){
@@ -3064,7 +3066,7 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
       color:active?'white':'var(--text)',fontWeight:active?600:400}}>{label}</button>;
   return<div>
     {showScanner&&<BarcodeScanner
-      onResult={({name,origin})=>{if(name)set('name',name);if(origin)set('origin',origin);}}
+      onResult={({name,origin})=>{if(name)set('name',name);if(origin){set('origin',origin);setOriginQ(origin);}}}
       onClose={()=>setShowScanner(false)}/>}
     <div className="fg">
       <label className="lbl">Cheese name *</label>
@@ -3100,16 +3102,24 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
         {CHEESE_TEXTURES.map(tx=>chip(tx,(f.textures||[]).includes(tx),()=>toggleArr('textures',tx)))}
       </div>
     </div>
-    <div className="row2">
-      <div className="fg"><label className="lbl">Where you found it</label>
-        <input className="inp" value={f.location} onChange={e=>set('location',e.target.value)} placeholder="e.g. Whole Foods"/>
-      </div>
-      <div className="fg"><label className="lbl">Origin</label>
-        <select className="inp" value={f.origin} onChange={e=>set('origin',e.target.value)}>
-          <option value="">— country —</option>
-          {COUNTRIES.map(c=><option key={c}>{c}</option>)}
-        </select>
-      </div>
+    <div className="fg"><label className="lbl">Where you found it</label>
+      <input className="inp" value={f.location} onChange={e=>set('location',e.target.value)} placeholder="e.g. Whole Foods"/>
+    </div>
+    <div className="fg" style={{position:'relative'}}><label className="lbl">Origin</label>
+      <input className="inp" value={originQ}
+        onChange={e=>{setOriginQ(e.target.value);set('origin',e.target.value);setOriginDd(true);}}
+        onFocus={()=>setOriginDd(true)}
+        onBlur={()=>setTimeout(()=>setOriginDd(false),160)}
+        placeholder="Type a country…"/>
+      {originDd&&(()=>{
+        const q=originQ.toLowerCase().trim();
+        const matches=COUNTRIES.filter(c=>c.toLowerCase().includes(q)).slice(0,8);
+        return matches.length>0?<div className="dd" style={{top:'calc(100% + 2px)',maxHeight:200}}>
+          {matches.map(c=><div key={c} className="dd-item" onMouseDown={e=>{e.preventDefault();set('origin',c);setOriginQ(c);setOriginDd(false);}}>
+            {c}
+          </div>)}
+        </div>:null;
+      })()}
     </div>
     <div className="fg"><label className="lbl">Notes</label>
       <textarea className="inp" value={f.notes} onChange={e=>set('notes',e.target.value)} placeholder="Tasting notes, pairings, context…" rows={3}/>
