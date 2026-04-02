@@ -3105,11 +3105,24 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
         </div>:null;
       })()}
     </div>
-    <div className="fg"><label className="lbl">Rating</label>
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <CheeseStars value={f.rating} onChange={v=>set('rating',v)} size={26}/>
-        {f.rating>0&&<span style={{fontSize:12,color:'var(--muted)'}}>{CHEESE_RATING_LABELS[f.rating]||''}</span>}
+    <div className="fg" style={{display:'flex',gap:10,alignItems:'flex-end',flexWrap:'wrap'}}>
+      <div style={{flex:1,minWidth:160}}>
+        <label className="lbl">Rating</label>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4}}>
+          <CheeseStars value={f.rating} onChange={v=>set('rating',v)} size={26}/>
+          {f.rating>0&&<span style={{fontSize:12,color:'var(--muted)'}}>{CHEESE_RATING_LABELS[f.rating]||''}</span>}
+        </div>
       </div>
+      <button type="button"
+        onClick={()=>set('wouldBuyAgain',!f.wouldBuyAgain)}
+        style={{flexShrink:0,padding:'7px 12px',borderRadius:'var(--r)',border:`2px solid ${f.wouldBuyAgain?'#f59e0b':'var(--border)'}`,
+          background:f.wouldBuyAgain?'#fffbeb':'white',cursor:'pointer',
+          display:'flex',alignItems:'center',gap:6,
+          fontSize:13,fontWeight:f.wouldBuyAgain?700:500,
+          color:f.wouldBuyAgain?'#92400e':'var(--muted)',transition:'all .2s',whiteSpace:'nowrap'}}>
+        <span style={{fontSize:18}}>{f.wouldBuyAgain?'🏆':'🧀'}</span>
+        {f.wouldBuyAgain?'Buy again ✓':'Would buy again?'}
+      </button>
     </div>
     <div className="fg"><label className="lbl">Flavor profile</label>
       <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
@@ -3131,18 +3144,6 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
       </div>}
       <input type="file" accept="image/*" onChange={handlePhoto} style={{fontSize:12,color:'var(--muted)'}}/>
       {uploading&&<span style={{fontSize:11,color:'var(--muted)',marginLeft:6}}>Resizing…</span>}
-    </div>
-    <div className="fg">
-      <button type="button"
-        onClick={()=>set('wouldBuyAgain',!f.wouldBuyAgain)}
-        style={{width:'100%',padding:'10px 14px',borderRadius:'var(--r)',border:`2px solid ${f.wouldBuyAgain?'#f59e0b':'var(--border)'}`,
-          background:f.wouldBuyAgain?'#fffbeb':'white',cursor:'pointer',
-          display:'flex',alignItems:'center',justifyContent:'center',gap:8,
-          fontSize:14,fontWeight:f.wouldBuyAgain?700:500,
-          color:f.wouldBuyAgain?'#92400e':'var(--muted)',transition:'all .2s'}}>
-        <span style={{fontSize:20}}>{f.wouldBuyAgain?'🏆':'🧀'}</span>
-        {f.wouldBuyAgain?'Would buy again! ✓':'Would buy again?'}
-      </button>
     </div>
     <div style={{display:'flex',gap:8,marginTop:4,justifyContent:'space-between'}}>
       <div style={{display:'flex',gap:8}}>
