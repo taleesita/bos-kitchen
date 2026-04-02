@@ -585,6 +585,19 @@ function reducer(state,action){
       const holidays={...state.holidays};delete holidays[n];
       return{...state,recipes,customCookbooks,holidays};
     }
+    case'COOKBOOK_RENAME':{
+      const{oldName,newName}=action;
+      if(!newName.trim()||newName===oldName)return state;
+      const recipes=state.recipes.map(r=>{
+        const holiday=r.holiday===oldName?newName:r.holiday;
+        const tags=(r.tags||[]).map(t=>t===oldName?newName:t);
+        return{...r,holiday,tags};
+      });
+      const customCookbooks=(state.customCookbooks||[]).map(c=>c===oldName?newName:c);
+      const holidays={...state.holidays};
+      if(holidays[oldName]){holidays[newName]=holidays[oldName];delete holidays[oldName];}
+      return{...state,recipes,customCookbooks,holidays};
+    }
     case'CHEESE_SAVE':{
       const existing=(state.cheeses||[]).find(c=>c.id===action.cheese.id);
       const cheeses=existing?(state.cheeses||[]).map(c=>c.id===action.cheese.id?action.cheese:c):[...(state.cheeses||[]),action.cheese];
@@ -2070,6 +2083,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
 function SettingsModal({state,dispatch,showToast,onClose}){
   const[section,setSection]=useState('cookbooks'); // 'cookbooks'|'ingredients'
   const[newCb,setNewCb]=useState('');
+  const[cbEditing,setCbEditing]=useState(null); // {name, draft}
   const[ingSearch,setIngSearch]=useState('');
   const[ingEditing,setIngEditing]=useState(null);
 
@@ -2149,20 +2163,48 @@ function SettingsModal({state,dispatch,showToast,onClose}){
             <button className="btn btn-primary btn-sm" onClick={addCookbook} disabled={!newCb.trim()}>Add</button>
           </div>
           <div style={{fontSize:11,color:'var(--muted)',marginBottom:8}}>
-            {allCookbooks.length} cookbooks · Click 🗑 to remove (will untag from all recipes)
+            {allCookbooks.length} cookbooks · ✏️ to rename · 🗑️ to remove
           </div>
           {allCookbooks.map(name=>{
             const count=cbCounts[name]||0;
             const emoji=COOKBOOK_EMOJIS[name];
+            const isEditing=cbEditing?.name===name;
+            if(isEditing){
+              return<div key={name} style={{display:'flex',gap:5,padding:'7px 0',borderBottom:'1px solid var(--border)',alignItems:'center',flexWrap:'wrap'}}>
+                <span style={{fontSize:16,width:22,textAlign:'center',flexShrink:0}}>{emoji||'📌'}</span>
+                <input className="inp" value={cbEditing.draft}
+                  onChange={e=>setCbEditing(v=>({...v,draft:e.target.value}))}
+                  onKeyDown={e=>{
+                    if(e.key==='Enter'&&cbEditing.draft.trim()){
+                      dispatch({type:'COOKBOOK_RENAME',oldName:name,newName:cbEditing.draft.trim()});
+                      showToast(`Renamed to "${cbEditing.draft.trim()}"`);setCbEditing(null);
+                    }
+                    if(e.key==='Escape')setCbEditing(null);
+                  }}
+                  style={{flex:'1 1 120px'}} autoFocus/>
+                <button className="btn btn-primary btn-sm" onClick={()=>{
+                  const n=cbEditing.draft.trim();
+                  if(!n)return;
+                  dispatch({type:'COOKBOOK_RENAME',oldName:name,newName:n});
+                  showToast(`Renamed to "${n}"`);setCbEditing(null);
+                }}>✓</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setCbEditing(null)}>✕</button>
+              </div>;
+            }
             return<div key={name} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderBottom:'1px solid var(--border)'}}>
-              <span style={{fontSize:16,width:22,textAlign:'center'}}>{emoji||'📌'}</span>
+              <span style={{fontSize:16,width:22,textAlign:'center',flexShrink:0}}>{emoji||'📌'}</span>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:500}}>{name}</div>
                 <div style={{fontSize:10,color:'var(--muted)'}}>{count>0?`${count} recipe${count!==1?'s':''}`:'No recipes yet'}</div>
               </div>
-              <button className="btn btn-sm" title="Remove cookbook"
-                style={{background:'var(--cream)',border:'1px solid var(--border)',color:'var(--muted)',flexShrink:0,padding:'4px 8px'}}
-                onClick={()=>deleteCookbook(name)}>🗑</button>
+              <button className="btn btn-icon" title="Rename cookbook"
+                style={{padding:'5px 7px',flexShrink:0}}
+                onClick={()=>setCbEditing({name,draft:name})}>
+                <span style={{display:'inline-block',transform:'scaleX(-1)',fontSize:15,lineHeight:1}}>✏️</span>
+              </button>
+              <button className="btn btn-icon" title="Remove cookbook"
+                style={{padding:'5px 7px',flexShrink:0}}
+                onClick={()=>deleteCookbook(name)}>🗑️</button>
             </div>;
           })}
         </>}
@@ -2191,11 +2233,11 @@ function SettingsModal({state,dispatch,showToast,onClose}){
                 <div style={{fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ing.name}</div>
                 <div style={{fontSize:10,color:'var(--muted)'}}>{[ing.store,recCount?`${recCount} recipe${recCount!==1?'s':''}`:''].filter(Boolean).join(' · ')}</div>
               </div>
-              <button className="btn btn-icon" style={{padding:'5px 8px'}} onClick={()=>setIngEditing({...ing})}>
-                <span style={{display:'inline-block',transform:'scaleX(-1)',fontSize:16,lineHeight:1}}>✏️</span>
+              <button className="btn btn-icon" style={{padding:'5px 7px',flexShrink:0}} onClick={()=>setIngEditing({...ing})}>
+                <span style={{display:'inline-block',transform:'scaleX(-1)',fontSize:15,lineHeight:1}}>✏️</span>
               </button>
-              <button className="btn btn-sm" style={{background:'var(--red)',color:'white',flexShrink:0}}
-                onClick={()=>{if(window.confirm(`Delete "${ing.name}"? It will be removed from all recipes.`)){dispatch({type:'DEL_ING',id:ing.id});showToast('Ingredient deleted.');}}}>✕</button>
+              <button className="btn btn-icon" title="Delete ingredient" style={{padding:'5px 7px',flexShrink:0}}
+                onClick={()=>{if(window.confirm(`Delete "${ing.name}"? It will be removed from all recipes.`)){dispatch({type:'DEL_ING',id:ing.id});showToast('Ingredient deleted.');}}}>🗑️</button>
             </div>;
           })}
           {filteredIngs.length===0&&<div style={{color:'var(--muted)',textAlign:'center',padding:16,fontSize:13}}>No ingredients found</div>}
@@ -2855,76 +2897,71 @@ function CheeseStars({value,onChange,size}){
   </div>;
 }
 
-// Barcode scanner modal
+// Barcode scanner modal — html5-qrcode: works on iOS Safari + Android Chrome
+function loadQrLib(){
+  if(window.Html5Qrcode)return Promise.resolve();
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    s.onload=()=>res();s.onerror=()=>rej(new Error('Could not load scanner library'));
+    document.head.appendChild(s);
+  });
+}
+
 function BarcodeScanner({onResult,onClose}){
-  const videoRef=useRef(null);
-  const streamRef=useRef(null);
-  const animRef=useRef(null);
-  const detRef=useRef(null);
-  const[phase,setPhase]=useState('init'); // init|scanning|found|lookup|notfound|unsupported|error|manual
-  const[result,setResult]=useState(null); // {name,origin,barcode}
+  const[phase,setPhase]=useState('loading'); // loading|scanning|lookup|found|notfound|error
   const[manualCode,setManualCode]=useState('');
   const[editName,setEditName]=useState('');
   const[editOrigin,setEditOrigin]=useState('');
+  const[errMsg,setErrMsg]=useState('');
+  const scannerRef=useRef(null);
+  const READER_ID='cheese-qr-reader';
 
   useEffect(()=>{
-    if(!('BarcodeDetector' in window)){setPhase('unsupported');return;}
-    detRef.current=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf']});
-    startCamera();
-    return()=>stopCamera();
+    let mounted=true;
+    loadQrLib().then(()=>{
+      if(!mounted)return;
+      const scanner=new Html5Qrcode(READER_ID,{verbose:false});
+      scannerRef.current=scanner;
+      return scanner.start(
+        {facingMode:'environment'},
+        {fps:10,qrbox:{width:260,height:110},aspectRatio:1.778},
+        async(code)=>{
+          try{await scanner.stop();}catch(e){}
+          scannerRef.current=null;
+          if(mounted){setManualCode(code);setPhase('lookup');await doLookup(code);}
+        },
+        ()=>{} // per-frame errors are normal — ignore
+      );
+    }).then(()=>{if(mounted)setPhase('scanning');})
+    .catch(e=>{if(mounted){setErrMsg(e?.message||'Camera not available');setPhase('error');}});
+    return()=>{
+      mounted=false;
+      if(scannerRef.current){scannerRef.current.stop().catch(()=>{});scannerRef.current=null;}
+    };
   },[]);
 
-  async function startCamera(){
-    try{
-      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
-      streamRef.current=stream;
-      if(videoRef.current){videoRef.current.srcObject=stream;await videoRef.current.play();}
-      setPhase('scanning');
-      scanLoop();
-    }catch(e){setPhase('error');}
-  }
-
-  function stopCamera(){
-    cancelAnimationFrame(animRef.current);
-    streamRef.current?.getTracks().forEach(t=>t.stop());
-    streamRef.current=null;
-  }
-
-  async function scanLoop(){
-    if(!videoRef.current||videoRef.current.readyState<2){
-      animRef.current=requestAnimationFrame(scanLoop);return;
-    }
-    try{
-      const codes=await detRef.current.detect(videoRef.current);
-      if(codes.length>0){
-        stopCamera();
-        await doLookup(codes[0].rawValue);
-        return;
-      }
-    }catch(e){}
-    animRef.current=requestAnimationFrame(scanLoop);
-  }
-
   async function doLookup(barcode){
-    setManualCode(barcode);
-    setPhase('lookup');
     try{
-      const res=await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const res=await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(barcode)}.json`);
       const data=await res.json();
       if(data.status===1){
         const p=data.product;
         const name=(p.product_name_en||p.product_name||p.generic_name_en||p.generic_name||'').trim();
         const origin=(p.origins_en||p.origins||'').split(',')[0].trim();
-        setEditName(name);setEditOrigin(origin);
-        setResult({name,origin,barcode});setPhase('found');
+        setEditName(name);setEditOrigin(origin);setPhase('found');
       }else{setPhase('notfound');}
     }catch(e){setPhase('notfound');}
   }
 
-  function accept(){
-    onResult({name:editName.trim(),origin:editOrigin.trim()});
-    onClose();
+  async function lookupManual(){
+    const code=manualCode.trim();if(!code)return;
+    if(scannerRef.current){try{await scannerRef.current.stop();}catch(e){}scannerRef.current=null;}
+    setPhase('lookup');
+    await doLookup(code);
   }
+
+  function accept(){onResult({name:editName.trim(),origin:editOrigin.trim()});onClose();}
 
   const overlay={position:'fixed',inset:0,background:'rgba(0,0,0,.7)',zIndex:500,display:'flex',alignItems:'center',justifyContent:'center',padding:16};
   const box={background:'white',borderRadius:12,padding:20,width:'100%',maxWidth:420,maxHeight:'90vh',overflowY:'auto'};
@@ -2936,26 +2973,25 @@ function BarcodeScanner({onResult,onClose}){
         <button className="btn-icon" onClick={onClose} style={{fontSize:18}}>✕</button>
       </div>
 
-      {/* Camera view */}
-      {(phase==='scanning'||phase==='init')&&<>
-        <div style={{position:'relative',borderRadius:8,overflow:'hidden',background:'#000',aspectRatio:'4/3',marginBottom:12}}>
-          <video ref={videoRef} style={{width:'100%',height:'100%',objectFit:'cover'}} playsInline muted/>
-          {/* Viewfinder overlay */}
-          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
-            <div style={{width:'65%',height:'35%',border:'2px solid rgba(255,255,255,.8)',borderRadius:6,boxShadow:'0 0 0 2000px rgba(0,0,0,.35)'}}/>
-          </div>
-        </div>
-        <p style={{fontSize:12,color:'var(--muted)',textAlign:'center',marginBottom:8}}>Hold a barcode in the frame</p>
-      </>}
+      {/* html5-qrcode mounts its camera view into this div */}
+      <div id={READER_ID} style={{
+        borderRadius:8,overflow:'hidden',marginBottom:8,
+        display:['loading','scanning'].includes(phase)?'block':'none'
+      }}/>
 
-      {phase==='lookup'&&<div style={{textAlign:'center',padding:'24px 0'}}>
+      {phase==='loading'&&<div style={{textAlign:'center',padding:'16px 0',color:'var(--muted)',fontSize:13}}>
+        <span className="spin"/><span style={{marginLeft:8}}>Starting camera…</span>
+      </div>}
+      {phase==='scanning'&&<p style={{fontSize:12,color:'var(--muted)',textAlign:'center',marginBottom:4}}>Hold a barcode in the frame — it will scan automatically</p>}
+
+      {phase==='lookup'&&<div style={{textAlign:'center',padding:'20px 0'}}>
         <span className="spin"/>
-        <p style={{marginTop:8,fontSize:13,color:'var(--muted)'}}>Looking up barcode {manualCode}…</p>
+        <p style={{marginTop:8,fontSize:13,color:'var(--muted)'}}>Looking up {manualCode}…</p>
       </div>}
 
       {phase==='found'&&<>
         <div style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:8,padding:12,marginBottom:12}}>
-          <p style={{fontSize:11,color:'#166534',fontWeight:600,marginBottom:6}}>✓ Found! Edit if needed:</p>
+          <p style={{fontSize:11,color:'#166534',fontWeight:600,marginBottom:8}}>✓ Found! Edit if needed:</p>
           <div className="fg"><label className="lbl">Cheese name</label>
             <input className="inp" value={editName} onChange={e=>setEditName(e.target.value)} placeholder="Name from barcode"/>
           </div>
@@ -2972,47 +3008,36 @@ function BarcodeScanner({onResult,onClose}){
       {phase==='notfound'&&<>
         <div style={{background:'#fef9c3',border:'1px solid #fde68a',borderRadius:8,padding:12,marginBottom:12,fontSize:13}}>
           <p style={{fontWeight:600,marginBottom:2}}>Barcode not in database</p>
-          <p style={{color:'var(--muted)',fontSize:12}}>Code: {manualCode}. Fill in the name yourself after closing.</p>
+          <p style={{color:'var(--muted)',fontSize:12}}>Code: {manualCode}. You can fill in the name manually.</p>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button className="btn btn-primary" style={{flex:1}} onClick={()=>onResult({name:'',origin:'',barcode:manualCode})&&onClose()}>Continue anyway</button>
+          <button className="btn btn-primary" style={{flex:1}} onClick={()=>{onResult({name:'',origin:'',barcode:manualCode});onClose();}}>Continue anyway</button>
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
         </div>
       </>}
 
-      {phase==='unsupported'&&<>
-        <p style={{fontSize:13,marginBottom:12,color:'var(--muted)'}}>Live scanning needs Chrome. Enter a barcode manually to look it up:</p>
-        <div style={{display:'flex',gap:8,marginBottom:12}}>
-          <input className="inp" value={manualCode} onChange={e=>setManualCode(e.target.value)} placeholder="e.g. 3760020510622" style={{flex:1}}/>
-          <button className="btn btn-primary btn-sm" onClick={()=>doLookup(manualCode)} disabled={!manualCode.trim()}>Look up</button>
-        </div>
-        {phase==='found'&&<div style={{marginTop:8}}>
-          <div className="fg"><label className="lbl">Name</label><input className="inp" value={editName} onChange={e=>setEditName(e.target.value)}/></div>
-          <div className="fg" style={{marginBottom:8}}><label className="lbl">Origin</label><input className="inp" value={editOrigin} onChange={e=>setEditOrigin(e.target.value)}/></div>
-          <button className="btn btn-primary" onClick={accept}>Use this →</button>
-        </div>}
-      </>}
-
       {phase==='error'&&<>
-        <p style={{fontSize:13,color:'var(--red)',marginBottom:12}}>Camera access denied. Enter a barcode number to look it up:</p>
-        <div style={{display:'flex',gap:8,marginBottom:8}}>
+        <p style={{fontSize:13,color:'var(--red)',marginBottom:10,lineHeight:1.4}}>{errMsg||'Camera access denied.'}<br/>
+          <span style={{color:'var(--muted)',fontSize:12}}>Make sure you allowed camera access, then try again. Or enter a barcode number below.</span>
+        </p>
+        <div style={{display:'flex',gap:8}}>
           <input className="inp" value={manualCode} onChange={e=>setManualCode(e.target.value)} placeholder="Barcode number" style={{flex:1}}/>
-          <button className="btn btn-primary btn-sm" onClick={()=>doLookup(manualCode)} disabled={!manualCode.trim()}>Look up</button>
+          <button className="btn btn-primary btn-sm" onClick={lookupManual} disabled={!manualCode.trim()}>Look up</button>
         </div>
       </>}
 
-      {/* Manual lookup always visible at bottom when not already in found/lookup state */}
-      {!['found','lookup','notfound'].includes(phase)&&phase!=='unsupported'&&phase!=='error'&&<div style={{marginTop:12,borderTop:'1px solid var(--border)',paddingTop:10}}>
+      {/* Manual lookup always available at bottom during scan */}
+      {['loading','scanning'].includes(phase)&&<div style={{marginTop:10,borderTop:'1px solid var(--border)',paddingTop:10}}>
         <p style={{fontSize:11,color:'var(--muted)',marginBottom:6}}>Or type a barcode number:</p>
         <div style={{display:'flex',gap:8}}>
-          <input className="inp" value={manualCode} onChange={e=>setManualCode(e.target.value)} placeholder="Barcode number" style={{flex:1,fontSize:12}}/>
-          <button className="btn btn-secondary btn-sm" onClick={()=>{stopCamera();doLookup(manualCode);}} disabled={!manualCode.trim()}>Look up</button>
+          <input className="inp" value={manualCode} onChange={e=>setManualCode(e.target.value)}
+            placeholder="e.g. 3760020510622" style={{flex:1,fontSize:12}}/>
+          <button className="btn btn-secondary btn-sm" onClick={lookupManual} disabled={!manualCode.trim()}>Look up</button>
         </div>
       </div>}
     </div>
   </div>;
 }
-
 function CheeseForm({cheese,onSave,onDelete,onCancel}){
   const blank={id:null,name:'',dateTried:new Date().toISOString().slice(0,10),cheeseType:'',
     rating:0,flavors:[],textures:[],location:'',origin:'',notes:'',isVegan:false,wouldBuyAgain:false,photo:null};
@@ -3050,7 +3075,7 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
           onClick={()=>setShowScanner(true)} title="Scan barcode">📷 Scan</button>
       </div>
     </div>
-    <div className="row2">
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10}}>
       <div className="fg"><label className="lbl">Date tried</label>
         <input className="inp" type="date" value={f.dateTried} onChange={e=>set('dateTried',e.target.value)}/>
       </div>
