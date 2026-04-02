@@ -449,7 +449,7 @@ function getUserData(state){
   return{v:1,mealPlan:state.mealPlan,shopping:state.shopping,holidays:state.holidays||{},
     customRecipes:(state.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id)),
     customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv,
-    noaRoster:state.noaRoster||[]};
+    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[]};
 }
 function encodeSync(state){return btoa(unescape(encodeURIComponent(JSON.stringify(getUserData(state)))));}
 function decodeSync(code,cur){
@@ -461,7 +461,8 @@ function decodeSync(code,cur){
   return{recipes:[...(window.SEED.recipes||[]),...mergeById(myRecs,ud.customRecipes||[])],
     ingredients:[...seedIngs,...mergeById(myIngs,ud.customIngs||[])],
     mealPlan:ud.mealPlan,shopping:ud.shopping,holidays:ud.holidays||{},
-    noaRoster:Array.isArray(ud.noaRoster)?ud.noaRoster:[]};
+    noaRoster:Array.isArray(ud.noaRoster)?ud.noaRoster:[],
+    cheeses:Array.isArray(ud.cheeses)?ud.cheeses:[]};
 }
 // ── Firebase sync — scripts loaded dynamically so they never block page load ──
 let fbApp=null;
@@ -486,7 +487,7 @@ const NOA_SEED_ROSTER=['noa-r-01','noa-r-02','noa-r-03','noa-r-04','noa-r-05','n
 function buildInitial(){
   return{recipes:window.SEED.recipes,ingredients:window.SEED.ingredients,
     mealPlan:{weekStart:getWeekStart(),days:Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}])),
-    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{},noaRoster:[...NOA_SEED_ROSTER]};
+    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{},noaRoster:[...NOA_SEED_ROSTER],cheeses:[]};
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -566,6 +567,12 @@ function reducer(state,action){
       const recipes=state.recipes.map(r=>({...r,ingredientRefs:(r.ingredientRefs||[]).filter(ref=>ref.id!==action.id)}));
       return{...state,ingredients,recipes};
     }
+    case'CHEESE_SAVE':{
+      const existing=(state.cheeses||[]).find(c=>c.id===action.cheese.id);
+      const cheeses=existing?(state.cheeses||[]).map(c=>c.id===action.cheese.id?action.cheese:c):[...(state.cheeses||[]),action.cheese];
+      return{...state,cheeses};
+    }
+    case'CHEESE_DEL':return{...state,cheeses:(state.cheeses||[]).filter(c=>c.id!==action.id)};
     default:return state;
   }
 }
@@ -2646,6 +2653,332 @@ function HolidaysTab({state,dispatch,showToast}){
   </div>;
 }
 
+// ── Cheese Tab ───────────────────────────────────────────────────────────────
+const CHEESE_TYPES=['Fresh/Unripened','Soft','Semi-soft','Semi-hard','Hard','Blue','Processed'];
+const CHEESE_FLAVORS=['Buttery','Creamy','Earthy','Funky','Mild','Nutty','Savory','Sharp','Smoky','Sweet','Tangy','Pungent'];
+const CHEESE_TEXTURES=['Chewy','Crumbly','Creamy','Firm','Flaky','Gooey','Grainy','Springy','Waxy'];
+
+function resizeImageToDataURL(file,maxPx,quality){
+  return new Promise(res=>{
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const scale=Math.min(1,maxPx/Math.max(img.width,img.height));
+      const w=Math.round(img.width*scale),h=Math.round(img.height*scale);
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      res(c.toDataURL('image/jpeg',quality));
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);res(null);};
+    img.src=url;
+  });
+}
+
+function CheeseStars({value,onChange,size}){
+  const[hover,setHover]=useState(0);
+  return<div style={{display:'flex',gap:2}}>
+    {[1,2,3,4,5].map(n=><button key={n}type="button"
+      style={{background:'none',border:'none',fontSize:size||20,cursor:onChange?'pointer':'default',padding:'0 1px',lineHeight:1,
+        color:n<=(hover||value)?'#e8a84a':'#d5cfc5',transition:'color .1s'}}
+      onMouseEnter={()=>onChange&&setHover(n)}
+      onMouseLeave={()=>onChange&&setHover(0)}
+      onClick={()=>onChange&&onChange(n)}>★</button>)}
+  </div>;
+}
+
+function CheeseForm({cheese,onSave,onDelete,onCancel}){
+  const blank={id:null,name:'',dateTried:new Date().toISOString().slice(0,10),cheeseType:'',
+    rating:0,flavors:[],textures:[],location:'',origin:'',notes:'',isVegan:false,wouldBuyAgain:false,photo:null};
+  const[f,setF]=useState(cheese?{...blank,...cheese}:blank);
+  const[uploading,setUploading]=useState(false);
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  const toggleArr=(k,v)=>set(k,f[k].includes(v)?f[k].filter(x=>x!==v):[...f[k],v]);
+  async function handlePhoto(e){
+    const file=e.target.files[0];if(!file)return;
+    setUploading(true);
+    const data=await resizeImageToDataURL(file,400,0.65);
+    setUploading(false);
+    if(data)set('photo',data);
+  }
+  function save(){
+    if(!f.name.trim())return;
+    onSave({...f,id:f.id||crypto.randomUUID(),name:f.name.trim()});
+  }
+  const chip=(label,active,onClick)=><button type="button"key={label}
+    onClick={onClick}
+    style={{padding:'4px 10px',borderRadius:20,border:'1.5px solid',fontSize:12,cursor:'pointer',transition:'all .15s',
+      background:active?'var(--sage)':'white',borderColor:active?'var(--sage)':'var(--border)',
+      color:active?'white':'var(--text)',fontWeight:active?600:400}}>{label}</button>;
+  return<div>
+    <div className="fg"><label className="lbl">Cheese name *</label>
+      <input className="inp" value={f.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. Époisses de Bourgogne" autoFocus/>
+    </div>
+    <div className="row2">
+      <div className="fg"><label className="lbl">Date tried</label>
+        <input className="inp" type="date" value={f.dateTried} onChange={e=>set('dateTried',e.target.value)}/>
+      </div>
+      <div className="fg"><label className="lbl">Type</label>
+        <select className="inp" value={f.cheeseType} onChange={e=>set('cheeseType',e.target.value)}>
+          <option value="">— pick one —</option>
+          {CHEESE_TYPES.map(t=><option key={t}>{t}</option>)}
+        </select>
+      </div>
+    </div>
+    <div className="fg"><label className="lbl">Rating</label>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <CheeseStars value={f.rating} onChange={v=>set('rating',v)} size={26}/>
+        {f.rating>0&&<span style={{fontSize:12,color:'var(--muted)'}}>{['','🫤 Meh','😐 Fine','🙂 Good','😄 Great','🤩 Amazing'][f.rating]}</span>}
+      </div>
+    </div>
+    <div className="fg"><label className="lbl">Flavor profile</label>
+      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+        {CHEESE_FLAVORS.map(fl=>chip(fl,f.flavors.includes(fl),()=>toggleArr('flavors',fl)))}
+      </div>
+    </div>
+    <div className="fg"><label className="lbl">Body &amp; texture</label>
+      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+        {CHEESE_TEXTURES.map(tx=>chip(tx,f.textures.includes(tx),()=>toggleArr('textures',tx)))}
+      </div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label className="lbl">Where you found it</label>
+        <input className="inp" value={f.location} onChange={e=>set('location',e.target.value)} placeholder="e.g. Whole Foods"/>
+      </div>
+      <div className="fg"><label className="lbl">Origin</label>
+        <input className="inp" value={f.origin} onChange={e=>set('origin',e.target.value)} placeholder="e.g. France"/>
+      </div>
+    </div>
+    <div className="fg"><label className="lbl">Notes</label>
+      <textarea className="inp" value={f.notes} onChange={e=>set('notes',e.target.value)} placeholder="Tasting notes, pairings, context…" rows={3}/>
+    </div>
+    <div className="fg"><label className="lbl">Photo</label>
+      {f.photo&&<div style={{marginBottom:8}}>
+        <img src={f.photo} alt="cheese" style={{width:120,height:120,objectFit:'cover',borderRadius:8,border:'1px solid var(--border)'}}/>
+        <button type="button" className="btn-ghost btn-sm" style={{display:'block',marginTop:4}} onClick={()=>set('photo',null)}>Remove photo</button>
+      </div>}
+      <input type="file" accept="image/*" onChange={handlePhoto} style={{fontSize:12,color:'var(--muted)'}}/>
+      {uploading&&<span style={{fontSize:11,color:'var(--muted)',marginLeft:6}}>Resizing…</span>}
+    </div>
+    <div className="fg" style={{display:'flex',gap:16,alignItems:'center'}}>
+      <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13}}>
+        <input type="checkbox" checked={f.wouldBuyAgain} onChange={e=>set('wouldBuyAgain',e.target.checked)}
+          style={{width:16,height:16,accentColor:'var(--sage)',cursor:'pointer'}}/>
+        Would buy again
+      </label>
+      <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13}}>
+        <input type="checkbox" checked={f.isVegan} onChange={e=>set('isVegan',e.target.checked)}
+          style={{width:16,height:16,accentColor:'var(--sage)',cursor:'pointer'}}/>
+        Vegan
+      </label>
+    </div>
+    <div style={{display:'flex',gap:8,marginTop:4,justifyContent:'space-between'}}>
+      <div style={{display:'flex',gap:8}}>
+        <button className="btn btn-primary" onClick={save} disabled={!f.name.trim()}>
+          {cheese?'Save changes':'Log it 🧀'}
+        </button>
+        <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+      </div>
+      {cheese&&onDelete&&<button className="btn"
+        style={{background:'#fee2e2',color:'#b91c1c',border:'1px solid #fca5a5'}}
+        onClick={()=>onDelete(cheese.id)}>Delete</button>}
+    </div>
+  </div>;
+}
+
+function CheeseCard({cheese,onEdit}){
+  const[expanded,setExpanded]=useState(false);
+  return<div className="card" style={{padding:'12px 14px'}}>
+    <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
+      {cheese.photo&&<img src={cheese.photo} alt=""
+        style={{width:64,height:64,objectFit:'cover',borderRadius:8,flexShrink:0,border:'1px solid var(--border)'}}/>}
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+          <div>
+            <span style={{fontWeight:700,fontSize:15}}>{cheese.name}</span>
+            {cheese.isVegan&&<span style={{marginLeft:6,fontSize:10,background:'#dcfce7',color:'#166534',borderRadius:10,padding:'1px 6px'}}>🌱 vegan</span>}
+            {cheese.wouldBuyAgain&&<span style={{marginLeft:4,fontSize:10,background:'#fef9c3',color:'#854d0e',borderRadius:10,padding:'1px 6px'}}>⭐ buy again</span>}
+          </div>
+          <button className="btn-icon" onClick={()=>onEdit(cheese)} style={{flexShrink:0,padding:'3px 6px',fontSize:13}}>✏️</button>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginTop:3}}>
+          <CheeseStars value={cheese.rating} size={14}/>
+          {cheese.cheeseType&&<span style={{fontSize:11,color:'var(--muted)'}}>· {cheese.cheeseType}</span>}
+          {cheese.dateTried&&<span style={{fontSize:11,color:'var(--muted)'}}>· {new Date(cheese.dateTried+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
+        </div>
+        {(cheese.location||cheese.origin)&&<div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>
+          {[cheese.location,cheese.origin].filter(Boolean).join(' · ')}
+        </div>}
+      </div>
+    </div>
+    {(cheese.flavors?.length||cheese.textures?.length||cheese.notes)&&<>
+      <button className="btn-ghost" style={{marginTop:6,padding:'2px 0',fontSize:11}}
+        onClick={()=>setExpanded(p=>!p)}>{expanded?'▲ Less':'▼ More'}</button>
+      {expanded&&<div style={{marginTop:6,borderTop:'1px solid var(--border)',paddingTop:8}}>
+        {cheese.flavors?.length>0&&<div style={{marginBottom:4}}>
+          <span style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.4}}>Flavors </span>
+          {cheese.flavors.map(f=><span key={f} style={{fontSize:11,background:'var(--cream)',border:'1px solid var(--border)',borderRadius:10,padding:'1px 7px',marginRight:4}}>{f}</span>)}
+        </div>}
+        {cheese.textures?.length>0&&<div style={{marginBottom:4}}>
+          <span style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.4}}>Texture </span>
+          {cheese.textures.map(t=><span key={t} style={{fontSize:11,background:'var(--cream)',border:'1px solid var(--border)',borderRadius:10,padding:'1px 7px',marginRight:4}}>{t}</span>)}
+        </div>}
+        {cheese.notes&&<p style={{fontSize:12,color:'var(--text)',marginTop:4,lineHeight:1.5}}>{cheese.notes}</p>}
+      </div>}
+    </>}
+  </div>;
+}
+
+function CheeseStats({cheeses}){
+  if(!cheeses.length)return<div style={{textAlign:'center',padding:'40px 20px',color:'var(--muted)'}}>
+    <div style={{fontSize:48,marginBottom:8}}>🧀</div>
+    <p>No cheeses logged yet — start exploring!</p>
+  </div>;
+  const rated=cheeses.filter(c=>c.rating>0);
+  const avgRating=rated.length?(rated.reduce((s,c)=>s+c.rating,0)/rated.length).toFixed(1):null;
+  const topCheese=rated.length?[...rated].sort((a,b)=>b.rating-a.rating)[0]:null;
+  const byType={};cheeses.forEach(c=>{if(c.cheeseType)byType[c.cheeseType]=(byType[c.cheeseType]||0)+1;});
+  const sortedTypes=Object.entries(byType).sort((a,b)=>b[1]-a[1]);
+  const flavorCount={};cheeses.forEach(c=>(c.flavors||[]).forEach(f=>{flavorCount[f]=(flavorCount[f]||0)+1;}));
+  const topFlavors=Object.entries(flavorCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const wouldBuyAgain=cheeses.filter(c=>c.wouldBuyAgain).length;
+  return<div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
+      {[
+        {emoji:'🧀',label:'Total logged',val:cheeses.length},
+        {emoji:'⭐',label:'Avg rating',val:avgRating?`${avgRating}/5`:'—'},
+        {emoji:'💚',label:'Would buy again',val:wouldBuyAgain},
+        {emoji:'🌱',label:'Vegan',val:cheeses.filter(c=>c.isVegan).length},
+      ].map(s=><div key={s.label} className="card" style={{textAlign:'center',padding:'12px 8px'}}>
+        <div style={{fontSize:24,marginBottom:2}}>{s.emoji}</div>
+        <div style={{fontSize:22,fontWeight:700,color:'var(--sage-dark)'}}>{s.val}</div>
+        <div style={{fontSize:11,color:'var(--muted)'}}>{s.label}</div>
+      </div>)}
+    </div>
+    {topCheese&&<div className="card" style={{marginBottom:10,background:'#fffbeb',borderColor:'#fde68a'}}>
+      <div style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.4,marginBottom:4}}>Top rated</div>
+      <div style={{fontWeight:700,fontSize:15}}>{topCheese.name}</div>
+      <CheeseStars value={topCheese.rating} size={14}/>
+    </div>}
+    {sortedTypes.length>0&&<div className="card" style={{marginBottom:10}}>
+      <div style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.4,marginBottom:8}}>By type</div>
+      {sortedTypes.map(([type,count])=>{
+        const pct=Math.round(count/cheeses.length*100);
+        return<div key={type} style={{marginBottom:6}}>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2}}>
+            <span>{type}</span><span style={{color:'var(--muted)'}}>{count}</span>
+          </div>
+          <div style={{height:6,background:'var(--border)',borderRadius:3}}>
+            <div style={{height:'100%',width:`${pct}%`,background:'var(--sage)',borderRadius:3,transition:'width .4s'}}/>
+          </div>
+        </div>;
+      })}
+    </div>}
+    {topFlavors.length>0&&<div className="card">
+      <div style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.4,marginBottom:8}}>Top flavors</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+        {topFlavors.map(([fl,n])=><span key={fl} style={{fontSize:12,background:'var(--cream)',border:'1px solid var(--border)',borderRadius:12,padding:'3px 10px'}}>
+          {fl} <strong style={{color:'var(--sage-dark)'}}>{n}</strong>
+        </span>)}
+      </div>
+    </div>}
+  </div>;
+}
+
+function CheeseTab({state,dispatch,showToast}){
+  const[sub,setSub]=useState('log');
+  const[editing,setEditing]=useState(null); // null=none, false=new form, or cheese obj
+  const[search,setSearch]=useState('');
+  const[typeFilter,setTypeFilter]=useState('');
+  const[sort,setSort]=useState('date');
+  const cheeses=state.cheeses||[];
+  function handleSave(cheese){
+    const isNew=!cheeses.find(c=>c.id===cheese.id);
+    dispatch({type:'CHEESE_SAVE',cheese});
+    showToast(isNew?`${cheese.name} logged! 🧀`:`${cheese.name} updated`);
+    setEditing(null);setSub('log');
+  }
+  function handleDelete(id){
+    const c=cheeses.find(x=>x.id===id);
+    dispatch({type:'CHEESE_DEL',id});
+    showToast(c?`${c.name} deleted`:'Deleted');
+    setEditing(null);
+  }
+  // Filter + sort
+  const filtered=cheeses.filter(c=>{
+    if(search&&!c.name.toLowerCase().includes(search.toLowerCase()))return false;
+    if(typeFilter&&c.cheeseType!==typeFilter)return false;
+    return true;
+  }).sort((a,b)=>{
+    if(sort==='rating')return(b.rating||0)-(a.rating||0);
+    if(sort==='name')return a.name.localeCompare(b.name);
+    return(b.dateTried||'')>(a.dateTried||'')?1:-1; // newest first
+  });
+  const usedTypes=[...new Set(cheeses.map(c=>c.cheeseType).filter(Boolean))].sort();
+  return<div className="content">
+    {/* Subtab nav */}
+    <div style={{display:'flex',gap:0,marginBottom:14,background:'white',border:'1px solid var(--border)',borderRadius:'var(--r)',overflow:'hidden'}}>
+      {[['log','📋 Log'],['add','➕ Add'],['stats','📊 Stats']].map(([id,label])=><button key={id}
+        style={{flex:1,padding:'9px 0',fontSize:13,fontWeight:sub===id?700:500,
+          background:sub===id?'var(--sage)':'white',color:sub===id?'white':'var(--muted)',
+          border:'none',borderRight:'1px solid var(--border)',cursor:'pointer',transition:'all .15s'}}
+        onClick={()=>{setSub(id);if(id!=='add')setEditing(null);}}>
+        {label}
+      </button>)}
+    </div>
+
+    {/* Log subtab */}
+    {sub==='log'&&<>
+      {cheeses.length===0?<div style={{textAlign:'center',padding:'48px 20px',color:'var(--muted)'}}>
+        <div style={{fontSize:56,marginBottom:10}}>🧀</div>
+        <div style={{fontSize:16,fontWeight:600,marginBottom:6}}>No cheeses yet!</div>
+        <p style={{fontSize:13,marginBottom:16}}>Start building your cheese log.</p>
+        <button className="btn btn-primary" onClick={()=>{setEditing(false);setSub('add');}}>Log your first cheese</button>
+      </div>:<>
+        <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+          <input className="inp" style={{flex:'1 1 160px',minWidth:0}} placeholder="🔍 Search…"
+            value={search} onChange={e=>setSearch(e.target.value)}/>
+          <select className="inp" style={{flex:'0 0 auto',width:'auto'}} value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}>
+            <option value="">All types</option>
+            {usedTypes.map(t=><option key={t}>{t}</option>)}
+          </select>
+          <select className="inp" style={{flex:'0 0 auto',width:'auto'}} value={sort} onChange={e=>setSort(e.target.value)}>
+            <option value="date">Newest first</option>
+            <option value="rating">Top rated</option>
+            <option value="name">A → Z</option>
+          </select>
+        </div>
+        {filtered.length===0?<p style={{color:'var(--muted)',textAlign:'center',padding:24}}>No cheeses match your filters.</p>
+          :filtered.map(c=><CheeseCard key={c.id} cheese={c} onEdit={c=>{setEditing(c);setSub('add');}}/>)}
+      </>}
+    </>}
+
+    {/* Add / Edit subtab */}
+    {sub==='add'&&<>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <h3 style={{fontSize:15,fontWeight:700}}>{editing?`Editing: ${editing.name}`:'Log a new cheese'}</h3>
+        {!editing&&cheeses.length>0&&<button className="btn btn-secondary btn-sm"
+          onClick={()=>{setEditing(null);setSub('log');}}>Back to log</button>}
+      </div>
+      <CheeseForm
+        cheese={editing||null}
+        onSave={handleSave}
+        onDelete={handleDelete}
+        onCancel={()=>{setEditing(null);setSub(cheeses.length?'log':'log');}}/>
+    </>}
+
+    {/* Stats subtab */}
+    {sub==='stats'&&<CheeseStats cheeses={cheeses}/>}
+
+    {/* FAB — Log button visible on Log tab */}
+    {sub==='log'&&cheeses.length>0&&<button className="btn btn-primary"
+      style={{position:'fixed',bottom:24,right:20,borderRadius:24,padding:'10px 18px',boxShadow:'0 4px 12px rgba(0,0,0,.2)',fontSize:14,zIndex:50}}
+      onClick={()=>{setEditing(false);setSub('add');}}>
+      + Log cheese
+    </button>}
+  </div>;
+}
+
 // ── Auth Wrapper ─────────────────────────────────────────────────────────────
 function AuthWrapper({children}){
   const[user,setUser]=useState(null);
@@ -2842,7 +3175,8 @@ function App({user,onSignOut}){
                 pickedUp:Array.isArray(safeShopping.pickedUp)?safeShopping.pickedUp:[]},
               holidays:ud.holidays||{},
               // Always include the Noa seed roster so pre-loaded recipes appear on all devices
-              noaRoster:[...new Set([...NOA_SEED_ROSTER,...(Array.isArray(ud.noaRoster)?ud.noaRoster:[])])]
+              noaRoster:[...new Set([...NOA_SEED_ROSTER,...(Array.isArray(ud.noaRoster)?ud.noaRoster:[])])],
+              cheeses:Array.isArray(ud.cheeses)?ud.cheeses:[]
             };
             fromFB.current=true; // mark so auto-save skips Firebase write-back
             fbInitialized.current=true; // Firebase had data — safe to write back on future changes
@@ -2872,6 +3206,7 @@ function App({user,onSignOut}){
     {id:'recipes',label:'🍴 Recipes'},
     {id:'holidays',label:'📚 Cookbooks'},
     {id:'noa',label:'🍼 Noa'},
+    {id:'cheese',label:'🧀 Cheese'},
   ];
   const TABS=isNanny?ALL_TABS.filter(t=>t.id==='noa'):ALL_TABS;
 
@@ -2908,6 +3243,7 @@ function App({user,onSignOut}){
     {tab==='recipes'&&<RecipesTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {tab==='holidays'&&<HolidaysTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {tab==='noa'&&<NoaTab state={state}dispatch={dispatch}showToast={showToast}isNanny={isNanny}/>}
+    {tab==='cheese'&&<CheeseTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {showSync&&<SyncModal state={state}syncStatus={syncStatus}fbDbUrl={fbDbUrl}
       onSetupFb={url=>{connectFirebase(url);setShowSync(false);showToast('Firebase connected! Changes sync in real-time.');}}
       onApply={merged=>{dispatch({type:'INIT',state:merged});showToast("Partner's changes applied!");}}
