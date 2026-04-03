@@ -701,6 +701,23 @@ function IngDrop({ingredients,selected,onChange,placeholder='Add ingredient…'}
   return<SearchDrop items={items}onSelect={handleSelect}placeholder={placeholder}allowNew={true}/>;
 }
 
+// ── Translation helpers ───────────────────────────────────────────────────────
+const HEB_RE=/[\u0590-\u05FF]/;
+function hasHebrew(...texts){return texts.some(t=>HEB_RE.test(t||''));}
+async function myMemoryTranslate(text){
+  if(!text?.trim()||!HEB_RE.test(text))return text;
+  try{
+    const res=await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0,500))}&langpair=he|en`);
+    const d=await res.json();
+    return d.responseData?.translatedText||text;
+  }catch(e){return text;}
+}
+async function translateRecipe(name,instructions){
+  const tName=await myMemoryTranslate(name);
+  const tSteps=await Promise.all((instructions||[]).map(s=>myMemoryTranslate(s)));
+  return{name:tName,instructions:tSteps};
+}
+
 // ── Recipe Modal ─────────────────────────────────────────────────────────────
 function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   const isNew=!recipe;
@@ -987,6 +1004,15 @@ function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast})
   const[addingPlan,setAddingPlan]=useState(false);
   const[sharing,setSharing]=useState(false);
   const[planMode,setPlanMode]=useState('day'); // 'day' | 'noa'
+  const[translated,setTranslated]=useState(null); // {name, instructions[]}
+  const[translating,setTranslating]=useState(false);
+  const recNeedsTranslation=hasHebrew(recipe.name,...(recipe.instructions||[]));
+  async function doTranslate(){
+    if(translated){setTranslated(null);return;} // toggle off
+    setTranslating(true);
+    const t=await translateRecipe(recipe.name,recipe.instructions||[]);
+    setTranslated(t);setTranslating(false);
+  }
   const modalBodyRef=useRef(null);
   useEffect(()=>{if((addingPlan||sharing)&&modalBodyRef.current){setTimeout(()=>modalBodyRef.current?.scrollTo({top:modalBodyRef.current.scrollHeight,behavior:'smooth'}),50);}},[addingPlan,sharing]);
   const[planDay,setPlanDay]=useState(DAYS[Math.max(0,new Date().getDay()-1)].toLowerCase());
@@ -1108,7 +1134,14 @@ function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast})
       <div className="rec-modal-header" style={{padding:'18px 16px 8px',display:'flex',gap:14,alignItems:'flex-start'}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:6}}>
-            <div style={{fontSize:17,fontWeight:700,lineHeight:1.3,flex:1}}>{recipe.name}</div>
+            <div style={{fontSize:17,fontWeight:700,lineHeight:1.3,flex:1,direction:translated?'ltr':'auto'}}>
+              {translated?translated.name:recipe.name}
+              {recNeedsTranslation&&<button onClick={doTranslate} title={translated?'Show original':'Translate'}
+                style={{background:'none',border:'none',cursor:'pointer',fontSize:14,marginLeft:6,
+                  opacity:translating?0.4:1,verticalAlign:'middle',padding:'0 2px',lineHeight:1}}>
+                {translating?'…':'🌐'}
+              </button>}
+            </div>
             {!isMobile&&<button className="mclose"style={{flexShrink:0,marginTop:-2}}onClick={onClose}>×</button>}
           </div>
           <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6}}>
@@ -1157,7 +1190,9 @@ function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast})
           </div>
           {(recipe.instructions||[]).map((step,i)=><div key={i}className="inst-step">
             <div className="inst-num">{i+1}</div>
-            <div className="inst-text">{renderStep(convertStepText(step))}</div>
+            <div className="inst-text" style={translated?{direction:'ltr'}:{}}>
+              {translated?convertStepText(translated.instructions[i]||step):renderStep(convertStepText(step))}
+            </div>
           </div>)}
         </div>}
         {!hasIngs&&!hasInst&&<div className="empty"style={{marginTop:12}}><div className="empty-icon">📝</div>No details yet. Edit to add ingredients and instructions.</div>}
@@ -2494,6 +2529,13 @@ function RecipesTab({state,dispatch,showToast}){
   const[editing,setEditing]=useState(null);
   const[viewing,setViewing]=useState(null);
   const[atpRec,setAtpRec]=useState(null); // {rec, day, slot} for quick add-to-plan
+  const[transCache,setTransCache]=useState({}); // {[recId]: {name} | 'loading'}
+  async function translateCard(r){
+    if(transCache[r.id]&&transCache[r.id]!=='loading'){setTransCache(c=>({...c,[r.id]:null}));return;} // toggle off
+    setTransCache(c=>({...c,[r.id]:'loading'}));
+    const t=await myMemoryTranslate(r.name);
+    setTransCache(c=>({...c,[r.id]:{name:t}}));
+  }
   const[importing,setImporting]=useState(false);
   const[showTimeSheet,setShowTimeSheet]=useState(false);
   const[showCookbookSheet,setShowCookbookSheet]=useState(false);
@@ -2549,7 +2591,15 @@ function RecipesTab({state,dispatch,showToast}){
             {r.imageUrl&&<img src={proxyImg(r.imageUrl)}data-orig={r.imageUrl}alt=""style={{width:54,height:54,objectFit:'cover',borderRadius:'var(--r-sm)',flexShrink:0,border:'1px solid var(--border)'}}onError={imgOnError}/>}
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:7}}>
-                <div className="rec-name">{r.name}</div>
+                <div className="rec-name" style={transCache[r.id]&&transCache[r.id]!=='loading'?{direction:'ltr'}:{}}>
+                  {transCache[r.id]&&transCache[r.id]!=='loading'?transCache[r.id].name:r.name}
+                  {hasHebrew(r.name)&&<button onClick={e=>{e.stopPropagation();translateCard(r);}}
+                    title={transCache[r.id]&&transCache[r.id]!=='loading'?'Show original':'Translate'}
+                    style={{background:'none',border:'none',cursor:'pointer',fontSize:12,marginLeft:4,
+                      opacity:transCache[r.id]==='loading'?0.4:0.7,verticalAlign:'middle',padding:'0 1px',lineHeight:1}}>
+                    {transCache[r.id]==='loading'?'…':'🌐'}
+                  </button>}
+                </div>
                 <div style={{display:'flex',gap:3,flexShrink:0,alignItems:'center'}}>
                   {r.holiday&&<span className="tag tag-holiday">{r.holiday}</span>}
                   {(r.tags||[]).filter(t=>t!==r.holiday&&t==='Nutbear').slice(0,1).map(t=><span key={t}className="tag tag-holiday"style={{background:'var(--sage-light)',color:'var(--sage-dark)',border:'1px solid var(--sage)',padding:'2px 6px'}}>{t}</span>)}
