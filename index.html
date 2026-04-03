@@ -1895,11 +1895,11 @@ function MealPlanTab({state,dispatch,showToast}){
         <button className="btn-ghost btn-sm"style={{marginTop:4}}onClick={()=>setAddingNoa(false)}>Done</button>
       </div>}
     </div>
-  </div>
   {viewing&&<RecipeViewModal recipe={viewing}ingredients={state.ingredients}
     onEdit={()=>setViewing(null)}
     onClose={()=>setViewing(null)}
     dispatch={dispatch}showToast={showToast}/>}
+  </div>;
 }
 
 // ── Shopping Tab ──────────────────────────────────────────────────────────────
