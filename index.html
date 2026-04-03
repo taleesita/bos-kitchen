@@ -701,6 +701,16 @@ function IngDrop({ingredients,selected,onChange,placeholder='Add ingredient…'}
   return<SearchDrop items={items}onSelect={handleSelect}placeholder={placeholder}allowNew={true}/>;
 }
 
+// ── Source link label helper ──────────────────────────────────────────────────
+function sourceLinkLabel(url){
+  if(!url)return'Source';
+  if(url.includes('instagram.com'))return'Instagram';
+  if(url.includes('tiktok.com'))return'TikTok';
+  if(url.includes('youtube.com')||url.includes('youtu.be'))return'YouTube';
+  if(url.includes('facebook.com'))return'Facebook';
+  if(url.includes('pinterest.com'))return'Pinterest';
+  return'Source';
+}
 // ── Translation helpers ───────────────────────────────────────────────────────
 const HEB_RE=/[\u0590-\u05FF]/;
 function hasHebrew(...texts){return texts.some(t=>HEB_RE.test(t||''));}
@@ -724,6 +734,7 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   const[name,setName]=useState(recipe?.name||'');
   const[holiday,setHoliday]=useState(recipe?.holiday||'');
   const[url,setUrl]=useState(recipe?.url||'');
+  const[sourceUrl,setSourceUrl]=useState(recipe?.sourceUrl||'');
   const[time,setTime]=useState(recipe?.time||'');
   const[refs,setRefs]=useState(recipe?.ingredientRefs||[]);
   const[tags,setTags]=useState(recipe?.tags||[]);
@@ -766,7 +777,7 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   function handleIngChange(newRefs,newIng){setRefs(newRefs);if(newIng)setNewIngs(n=>[...n,newIng]);}
   function rmRef(id){setRefs(r=>r.filter(x=>x.id!==id));}
   function updQty(id,qty){setRefs(r=>r.map(x=>x.id===id?{...x,quantity:qty}:x));}
-  function save(){if(!name.trim())return;const inst=instructions.split('\n').map(s=>s.trim()).filter(Boolean);const tMin=parseInt(time)||null;onSave({id:recipe?.id||uid(),name:name.trim(),holiday,url,tags,ingredientRefs:refs,instructions:inst,imageUrl:imageUrl||undefined,servings:recipe?.servings,...(tMin?{time:tMin}:{})},newIngs);}
+  function save(){if(!name.trim())return;const inst=instructions.split('\n').map(s=>s.trim()).filter(Boolean);const tMin=parseInt(time)||null;onSave({id:recipe?.id||uid(),name:name.trim(),holiday,url,sourceUrl:sourceUrl||undefined,tags,ingredientRefs:refs,instructions:inst,imageUrl:imageUrl||undefined,servings:recipe?.servings,...(tMin?{time:tMin}:{})},newIngs);}
   return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
     <div className="modal">
       {imageUrl&&<img src={proxyImg(imageUrl)}data-orig={imageUrl}alt=""style={{width:'100%',height:160,objectFit:'cover',borderRadius:'var(--r) var(--r) 0 0',display:'block'}}onError={imgOnError}/>}
@@ -778,7 +789,8 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
           <option value="Diabetes Friendly">Diabetes Friendly</option><option value="Lactation">Lactation</option>
         </select>
       </div>
-      <div className="fg"><label className="lbl">Recipe URL</label><input className="inp"value={url}onChange={e=>setUrl(e.target.value)}placeholder="https://…"/></div>
+      <div className="fg"><label className="lbl">Recime URL</label><input className="inp"value={url}onChange={e=>setUrl(e.target.value)}placeholder="https://recime.app/…"/></div>
+      <div className="fg"><label className="lbl">Original source (Instagram, blog…)</label><input className="inp"value={sourceUrl}onChange={e=>setSourceUrl(e.target.value)}placeholder="https://instagram.com/…"/></div>
       <div className="fg">
         <label className="lbl">Photo</label>
         {imageUrl&&<div style={{position:'relative',marginBottom:6}}>
@@ -1052,7 +1064,8 @@ function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast})
       @media print{body{margin:0;max-width:100%;}}</style></head>
     <body>${imgHtml}<h1>${recipe.name}</h1>
     ${tags?`<div class="meta">${tags}</div>`:''}
-    ${recipe.url?`<div class="src">Source: <a href="${recipe.url}">${recipe.url}</a></div>`:''}
+    ${recipe.sourceUrl?`<div class="src">${sourceLinkLabel(recipe.sourceUrl)}: <a href="${recipe.sourceUrl}">${recipe.sourceUrl}</a></div>`:''}
+    ${recipe.url?`<div class="src">Recime: <a href="${recipe.url}">${recipe.url}</a></div>`:''}
     ${ingsHtml?`<h2>Ingredients (${servings} serving${servings!==1?'s':''})</h2><ul>${ingsHtml}</ul>`:''}
     ${stepsHtml?`<h2>Instructions</h2><ol>${stepsHtml}</ol>`:''}
     <script>window.onload=()=>{setTimeout(()=>window.print(),400);}<\/script></body></html>`;
@@ -1066,7 +1079,7 @@ function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast})
       const qty=displayQty(ref.quantity);return`• ${ing.name}${qty?': '+qty:''}`;
     }).filter(Boolean).join('\n');
     const steps=(recipe.instructions||[]).map((s,i)=>`${i+1}. ${convertStepText(s)}`).join('\n');
-    const parts=[recipe.name,tags&&`(${tags})`,recipe.url&&`Source: ${recipe.url}`,'',ings&&'Ingredients:\n'+ings,'',steps&&'Instructions:\n'+steps];
+    const parts=[recipe.name,tags&&`(${tags})`,recipe.sourceUrl&&`${sourceLinkLabel(recipe.sourceUrl)}: ${recipe.sourceUrl}`,recipe.url&&`Recime: ${recipe.url}`,'',ings&&'Ingredients:\n'+ings,'',steps&&'Instructions:\n'+steps];
     navigator.clipboard.writeText(parts.filter(Boolean).join('\n').trim())
       .then(()=>{showToast&&showToast('Recipe copied to clipboard!');setSharing(false);});
   }
@@ -1077,7 +1090,7 @@ function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast})
       const qty=displayQty(ref.quantity);return`• ${ing.name}${qty?': '+qty:''}`;
     }).filter(Boolean).join('\n');
     const steps=(recipe.instructions||[]).map((s,i)=>`${i+1}. ${convertStepText(s)}`).join('\n');
-    const parts=[recipe.name,tags&&`(${tags})`,recipe.url&&`Source: ${recipe.url}`,'',ings&&'Ingredients:\n'+ings,'',steps&&'Instructions:\n'+steps];
+    const parts=[recipe.name,tags&&`(${tags})`,recipe.sourceUrl&&`${sourceLinkLabel(recipe.sourceUrl)}: ${recipe.sourceUrl}`,recipe.url&&`Recime: ${recipe.url}`,'',ings&&'Ingredients:\n'+ings,'',steps&&'Instructions:\n'+steps];
     const body=parts.filter(Boolean).join('\n').trim();
     window.location.href=`mailto:?subject=${encodeURIComponent(recipe.name)}&body=${encodeURIComponent(body)}`;
   }
@@ -1149,7 +1162,8 @@ function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast})
             {(recipe.tags||[]).filter(t=>t!==recipe.holiday).map(t=><span key={t}className="tag"style={{background:'var(--sage-light)',color:'var(--sage-dark)',border:'1px solid var(--sage)',padding:'2px 6px',borderRadius:10,fontSize:11,fontWeight:500}}>{COOKBOOK_EMOJIS[t]?COOKBOOK_EMOJIS[t]+' ':''}{t}</span>)}
           </div>
           <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:6,flexWrap:'wrap'}}>
-            {recipe.url&&<a href={recipe.url}target="_blank"style={{fontSize:12,color:'var(--sage-dark)'}}>Source ↗</a>}
+            {recipe.sourceUrl&&<a href={recipe.sourceUrl}target="_blank"style={{fontSize:12,color:'var(--sage-dark)',fontWeight:500}}>{sourceLinkLabel(recipe.sourceUrl)} ↗</a>}
+            {recipe.url&&<a href={recipe.url}target="_blank"style={{fontSize:12,color:'var(--muted)'}}>Recime ↗</a>}
             {recipe.time&&<span style={{fontSize:12,color:'var(--muted)'}}>⏱ {recipe.time<60?`${recipe.time} min`:`${Math.floor(recipe.time/60)}h${recipe.time%60?` ${recipe.time%60}m`:''}`}</span>}
           </div>
           {hasIngs&&<div style={{display:'flex',alignItems:'center',gap:8,marginTop:4,flexWrap:'wrap'}}>
@@ -2610,7 +2624,8 @@ function RecipesTab({state,dispatch,showToast}){
                 {ingNames(r)&&<span>{ingNames(r)}</span>}
                 <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
                   {r.time&&<span style={{fontSize:11,color:'var(--muted)'}}>⏱ {r.time<60?`${r.time}m`:`${Math.floor(r.time/60)}h${r.time%60?` ${r.time%60}m`:''}`}</span>}
-                  {r.url&&<a href={r.url}target="_blank"onClick={e=>e.stopPropagation()}style={{fontSize:12}}>Recipe →</a>}
+                  {r.sourceUrl&&<a href={r.sourceUrl}target="_blank"onClick={e=>e.stopPropagation()}style={{fontSize:12,fontWeight:500,color:'var(--sage-dark)'}}>{sourceLinkLabel(r.sourceUrl)} →</a>}
+                  {r.url&&<a href={r.url}target="_blank"onClick={e=>e.stopPropagation()}style={{fontSize:12,color:'var(--muted)'}}>Recime →</a>}
                 </div>
               </div>
               {hFilter==='Nutbear'&&<div style={{display:'flex',gap:6,marginTop:6}}onClick={e=>e.stopPropagation()}>
