@@ -1907,6 +1907,45 @@ function MealPlanTab({state,dispatch,showToast}){
 }
 
 // ── Shopping Tab ──────────────────────────────────────────────────────────────
+// Render a single shopping item row
+function ShopRow({item,checked,onCheck,showStore,showRecipe,onSaveIng}){
+const[rowEditing,setRowEditing]=useState(false);
+const[rowEditData,setRowEditData]=useState(null);
+const qtyRecipes=new Set(item.qtys.map(q=>q.recipe));
+const plainSources=item.sources.filter(s=>!qtyRecipes.has(s));
+if(rowEditing&&rowEditData){
+  return<div className="shop-item"style={{flexDirection:'column',alignItems:'stretch',gap:6}}>
+    <div style={{fontSize:12,color:'var(--muted)',fontWeight:600}}>{item.name}</div>
+    <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
+      <input className="inp"value={rowEditData.name}onChange={e=>setRowEditData(v=>({...v,name:e.target.value}))}style={{flex:'1 1 100px',fontSize:13,padding:'5px 8px'}}/>
+      <select className="inp"value={rowEditData.store||''}onChange={e=>setRowEditData(v=>({...v,store:e.target.value}))}style={{width:'auto',fontSize:13,padding:'5px 8px'}}>
+        <option value="">Store?</option>
+        <option>Trader Joe's</option><option>Whole Foods</option><option>Other</option>
+      </select>
+      <button className="btn btn-primary btn-sm"onClick={()=>{onSaveIng(rowEditData);setRowEditing(false);}}>✓</button>
+      <button className="btn btn-secondary btn-sm"onClick={()=>setRowEditing(false)}>✕</button>
+    </div>
+  </div>;
+}
+return<div className="shop-item">
+  <CB checked={checked}onChange={onCheck}/>
+  <div style={{flex:1}}>
+    <div className="sname">{item.name}</div>
+    {showRecipe&&(item.qtys.length>0||plainSources.length>0)&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:3}}>
+      {item.qtys.map((q,i)=><div key={i}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,display:'flex',flexDirection:'column',maxWidth:160}}>
+        <span style={{color:'var(--sage-dark)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q.recipe}</span>
+        {showQty&&q.qty&&<span style={{color:'var(--text)',fontWeight:400}}>{q.qty}</span>}
+      </div>)}
+      {plainSources.map(s=><div key={s}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,maxWidth:160}}>
+        <span style={{color:'var(--sage-dark)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}>{s}</span>
+      </div>)}
+    </div>}
+  </div>
+  {showStore&&<StoreBadge store={item.store}/>}
+  {onSaveIng&&<button onClick={()=>{setRowEditData({id:item.id,name:item.name,store:item.store||''});setRowEditing(true);}}style={{background:'none',border:'none',cursor:'pointer',padding:'4px',flexShrink:0,lineHeight:1}}title="Edit ingredient"><span style={{display:'inline-block',transform:'scaleX(-1)',fontSize:16,lineHeight:1}}>✏️</span></button>}
+</div>;
+}
+
 function ShoppingTab({state,dispatch,showToast,phase}){
   const[sortBy,setSortBy]=useState('alpha'); // 'alpha' | 'recipe' | 'aisle'
   const[showRecipe,setShowRecipe]=useState(false);
@@ -2025,44 +2064,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
     return g;
   },[shopItems]);
 
-  // Render a single shopping item row
-  function ShopRow({item,checked,onCheck,showStore,onSaveIng}){
-    const[rowEditing,setRowEditing]=useState(false);
-    const[rowEditData,setRowEditData]=useState(null);
-    const qtyRecipes=new Set(item.qtys.map(q=>q.recipe));
-    const plainSources=item.sources.filter(s=>!qtyRecipes.has(s));
-    if(rowEditing&&rowEditData){
-      return<div className="shop-item"style={{flexDirection:'column',alignItems:'stretch',gap:6}}>
-        <div style={{fontSize:12,color:'var(--muted)',fontWeight:600}}>{item.name}</div>
-        <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
-          <input className="inp"value={rowEditData.name}onChange={e=>setRowEditData(v=>({...v,name:e.target.value}))}style={{flex:'1 1 100px',fontSize:13,padding:'5px 8px'}}/>
-          <select className="inp"value={rowEditData.store||''}onChange={e=>setRowEditData(v=>({...v,store:e.target.value}))}style={{width:'auto',fontSize:13,padding:'5px 8px'}}>
-            <option value="">Store?</option>
-            <option>Trader Joe's</option><option>Whole Foods</option><option>Other</option>
-          </select>
-          <button className="btn btn-primary btn-sm"onClick={()=>{onSaveIng(rowEditData);setRowEditing(false);}}>✓</button>
-          <button className="btn btn-secondary btn-sm"onClick={()=>setRowEditing(false)}>✕</button>
-        </div>
-      </div>;
-    }
-    return<div className="shop-item">
-      <CB checked={checked}onChange={onCheck}/>
-      <div style={{flex:1}}>
-        <div className="sname">{item.name}</div>
-        {showRecipe&&(item.qtys.length>0||plainSources.length>0)&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:3}}>
-          {item.qtys.map((q,i)=><div key={i}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,display:'flex',flexDirection:'column',maxWidth:160}}>
-            <span style={{color:'var(--sage-dark)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q.recipe}</span>
-            {showQty&&q.qty&&<span style={{color:'var(--text)',fontWeight:400}}>{q.qty}</span>}
-          </div>)}
-          {plainSources.map(s=><div key={s}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,maxWidth:160}}>
-            <span style={{color:'var(--sage-dark)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}>{s}</span>
-          </div>)}
-        </div>}
-      </div>
-      {showStore&&<StoreBadge store={item.store}/>}
-      {onSaveIng&&<button onClick={()=>{setRowEditData({id:item.id,name:item.name,store:item.store||''});setRowEditing(true);}}style={{background:'none',border:'none',cursor:'pointer',padding:'4px',flexShrink:0,lineHeight:1}}title="Edit ingredient"><span style={{display:'inline-block',transform:'scaleX(-1)',fontSize:16,lineHeight:1}}>✏️</span></button>}
-    </div>;
-  }
+
 
   return<div className="content">
     <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
@@ -2081,7 +2083,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
       <div className="card"style={{padding:0,overflow:'hidden'}}>
         {reviewItems.map(item=>{
           const isKnownIng=state.ingredients.find(i=>i.id===item.id);
-          return<ShopRow key={item.id}item={item}
+          return<ShopRow key={item.id}showRecipe={showRecipe}item={item}
             checked={needed.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_NEED',id:item.id})}showStore={true}
             onSaveIng={isKnownIng?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/>;
         })}
