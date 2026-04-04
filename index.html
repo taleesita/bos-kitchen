@@ -611,8 +611,12 @@ function reducer(state,action){
 // ── Toast ────────────────────────────────────────────────────────────────────
 function Toast({msg,onUndo,onDone}){
   const dur=onUndo?5000:2200;
-  useEffect(()=>{const t=setTimeout(onDone,dur);return()=>clearTimeout(t);},[]);
-  return<div className="toast">
+  const[fading,setFading]=useState(false);
+  useEffect(()=>{
+    const t=setTimeout(()=>{setFading(true);setTimeout(onDone,200);},dur);
+    return()=>clearTimeout(t);
+  },[]);
+  return<div className="toast"style={{opacity:fading?0:1,transition:'opacity 0.2s',pointerEvents:fading?'auto':undefined}}>
     <span style={{flex:1}}>{msg}</span>
     {onUndo&&<button className="toast-undo"onClick={()=>{onUndo();onDone();}}>Undo</button>}
   </div>;
@@ -780,7 +784,7 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   function rmRef(id){setRefs(r=>r.filter(x=>x.id!==id));}
   function updQty(id,qty){setRefs(r=>r.map(x=>x.id===id?{...x,quantity:qty}:x));}
   function save(){if(!name.trim())return;const inst=instructions.split('\n').map(s=>s.trim()).filter(Boolean);const tMin=parseInt(time)||null;onSave({id:recipe?.id||uid(),name:name.trim(),holiday,url,sourceUrl:sourceUrl||undefined,tags,ingredientRefs:refs,instructions:inst,imageUrl:imageUrl||undefined,servings:recipe?.servings,...(tMin?{time:tMin}:{})},newIngs);}
-  return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+  return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget&&!editing)onClose();}}>
     <div className="modal">
       {imageUrl&&<img src={proxyImg(imageUrl)}data-orig={imageUrl}alt=""style={{width:'100%',height:160,objectFit:'cover',borderRadius:'var(--r) var(--r) 0 0',display:'block'}}onError={imgOnError}/>}
       <div className="mhdr"><div className="mtitle">{isNew?'New Recipe':'Edit Recipe'}</div><button className="mclose"onClick={onClose}>×</button></div>
