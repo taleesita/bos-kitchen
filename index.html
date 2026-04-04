@@ -2305,9 +2305,8 @@ function SettingsModal({state,dispatch,showToast,onClose}){
   </div>;
 }
 
-function ManageIngsModal({ingredients,recipes,onSave,onDelete,onClose}){
+function ManageIngsModal({ingredients,recipes,editing,setEditing,onSave,onDelete,onClose}){
   const[search,setSearch]=useState('');
-  const[editing,setEditing]=useState(null);
   const sorted=useMemo(()=>[...ingredients].sort((a,b)=>a.name.localeCompare(b.name)),[ingredients]);
   const filtered=useMemo(()=>{const q=search.toLowerCase();return sorted.filter(i=>i.name.toLowerCase().includes(q));},[sorted,search]);
   return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
@@ -2563,6 +2562,7 @@ function RecipesTab({state,dispatch,showToast}){
   const[showTimeSheet,setShowTimeSheet]=useState(false);
   const[showCookbookSheet,setShowCookbookSheet]=useState(false);
   const[managingIngs,setManagingIngs]=useState(false);
+  const[ingEditing,setIngEditing]=useState(null); // lifted from ManageIngsModal
   const isMobile=useIsMobile();
   const allHols=useMemo(()=>[...new Set(state.recipes.flatMap(r=>[r.holiday,...(r.tags||[])]).filter(Boolean))].sort(),[state.recipes]);
   const filtered=useMemo(()=>{
@@ -2696,9 +2696,10 @@ function RecipesTab({state,dispatch,showToast}){
       onCreateNew={()=>setEditing('new')}
       onClose={()=>setImporting(false)}/>}
     {managingIngs&&<ManageIngsModal ingredients={state.ingredients}recipes={state.recipes}
+      editing={ingEditing}setEditing={setIngEditing}
       onSave={ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}}
       onDelete={id=>{dispatch({type:'DEL_ING',id});showToast('Ingredient deleted.');}}
-      onClose={()=>setManagingIngs(false)}/>}
+      onClose={()=>{setManagingIngs(false);setIngEditing(null);}}/>}
     {showIngSheet&&<IngredientFilterSheet
       ingredients={state.ingredients}
       recipes={state.recipes}
