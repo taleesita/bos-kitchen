@@ -1012,8 +1012,125 @@ function getIngAliases(name){
   return[...set].filter(a=>a.length>2);
 }
 
+// ── Huckleberry Logger Modal ──────────────────────────────────────────────────
+function HuckleberryModal({queue,recipes,allIngredients,copied,onCopy,onAddRecipe,onRemoveRecipe,onReset,onClose}){
+  const[search,setSearch]=useState('');
+  const[showSearch,setShowSearch]=useState(false);
+  const searchRef=useRef(null);
+
+  const allIngs=useMemo(()=>{
+    const seen=new Map();
+    queue.forEach(recId=>{
+      const rec=recipes.find(r=>r.id===recId);
+      if(!rec)return;
+      (rec.ingredientRefs||[]).forEach(ref=>{
+        const ing=allIngredients.find(i=>i.id===ref.id);
+        if(!ing)return;
+        if(!seen.has(ref.id))seen.set(ref.id,{ing,qtys:[]});
+        if(ref.quantity)seen.get(ref.id).qtys.push(ref.quantity);
+      });
+    });
+    return[...seen.values()].sort((a,b)=>a.ing.name.localeCompare(b.ing.name));
+  },[queue,recipes,allIngredients]);
+
+  const filteredRecs=useMemo(()=>{
+    if(!search.trim())return[];
+    const q=search.toLowerCase();
+    return[...recipes].filter(r=>r.name.toLowerCase().includes(q)&&!queue.includes(r.id)).sort((a,b)=>a.name.localeCompare(b.name)).slice(0,8);
+  },[search,recipes,queue]);
+
+  const copiedCount=allIngs.filter(({ing})=>copied.includes(ing.id)).length;
+  const allDone=allIngs.length>0&&copiedCount===allIngs.length;
+
+  useEffect(()=>{if(showSearch)setTimeout(()=>searchRef.current?.focus(),50);},[showSearch]);
+
+  return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div className="modal"style={{maxWidth:440,padding:0}}>
+      {/* Header */}
+      <div style={{padding:'16px 18px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:10}}>
+        <span style={{fontSize:22,lineHeight:1}}>🫐</span>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:700,fontSize:15}}>Huckleberry Logger</div>
+          <div style={{fontSize:12,color:'var(--muted)'}}>Copy each ingredient into Huckleberry one by one</div>
+        </div>
+        <button className="mclose"onClick={onClose}>×</button>
+      </div>
+
+      <div style={{padding:'14px 18px',overflowY:'auto',maxHeight:'65vh'}}>
+        {/* Recipe chips */}
+        <div style={{marginBottom:14}}>
+          <div className="modal-section-title"style={{marginBottom:6}}>Recipes in this meal</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center'}}>
+            {queue.map(recId=>{
+              const rec=recipes.find(r=>r.id===recId);
+              return rec?<span key={recId}className="chip recipe"style={{paddingRight:5}}>
+                {rec.name}
+                <button onClick={()=>onRemoveRecipe(recId)}style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13,padding:'0 0 0 3px',lineHeight:1,marginLeft:2}}>✕</button>
+              </span>:null;
+            })}
+            <button className="btn btn-ghost"style={{fontSize:12,padding:'3px 8px',border:'1px dashed var(--border)',borderRadius:20}}
+              onClick={()=>setShowSearch(s=>!s)}>{showSearch?'✕ Cancel':'+ Add recipe'}</button>
+          </div>
+          {showSearch&&<div style={{marginTop:8}}>
+            <input ref={searchRef}className="inp"placeholder="Search recipes…"value={search}onChange={e=>setSearch(e.target.value)}style={{marginBottom:4}}/>
+            {filteredRecs.length>0&&<div style={{background:'white',border:'1px solid var(--border)',borderRadius:'var(--r-sm)',overflow:'hidden'}}>
+              {filteredRecs.map(r=><div key={r.id}style={{padding:'8px 12px',fontSize:13,cursor:'pointer',borderBottom:'1px solid var(--border)'}}
+                onMouseEnter={e=>e.currentTarget.style.background='var(--cream)'}
+                onMouseLeave={e=>e.currentTarget.style.background='white'}
+                onClick={()=>{onAddRecipe(r.id);setSearch('');setShowSearch(false);}}>
+                {r.name}
+              </div>)}
+            </div>}
+            {search.trim()&&filteredRecs.length===0&&<div style={{fontSize:12,color:'var(--muted)',padding:'6px 2px'}}>No matches</div>}
+          </div>}
+        </div>
+
+        {/* Progress bar */}
+        {allIngs.length>0&&<div style={{marginBottom:14}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+            <span style={{fontSize:12,fontWeight:600,color:allDone?'#4caf50':'var(--muted)'}}>
+              {allDone?'✅ All copied! Tap "Start fresh" for next meal.':`${copiedCount} / ${allIngs.length} copied`}
+            </span>
+            {allIngs.length>0&&<span style={{fontSize:11,color:'var(--muted)'}}>{allIngs.length-copiedCount} remaining</span>}
+          </div>
+          <div style={{height:5,background:'var(--border)',borderRadius:3,overflow:'hidden'}}>
+            <div style={{height:'100%',background:allDone?'#4caf50':'var(--sage)',borderRadius:3,width:`${allIngs.length?Math.round(copiedCount/allIngs.length*100):0}%`,transition:'width .3s'}}/>
+          </div>
+        </div>}
+
+        {/* Ingredient list */}
+        {queue.length===0&&<div className="empty"style={{padding:'20px 0'}}>
+          <div className="empty-icon">🫐</div>Add a recipe above to get started
+        </div>}
+        {allIngs.map(({ing,qtys})=>{
+          const done=copied.includes(ing.id);
+          return<div key={ing.id}style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'1px solid var(--border)',opacity:done?0.45:1,transition:'opacity .2s'}}>
+            <span style={{fontSize:22,lineHeight:1,flexShrink:0}}>{ingEmoji(ing.name)}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:500,textDecoration:done?'line-through':'none',color:done?'var(--muted)':'var(--text)'}}>{ing.name}</div>
+              {qtys.length>0&&<div style={{fontSize:11,color:'var(--muted)'}}>{qtys.join(' · ')}</div>}
+            </div>
+            {done
+              ?<span style={{color:'#4caf50',fontSize:20,flexShrink:0}}>✅</span>
+              :<button className="btn btn-secondary"style={{padding:'5px 11px',fontSize:12,flexShrink:0,whiteSpace:'nowrap'}}
+                onClick={()=>{navigator.clipboard.writeText(ing.name).catch(()=>{});onCopy(ing.id);}}>
+                Copy 📋
+              </button>}
+          </div>;
+        })}
+      </div>
+
+      {/* Footer */}
+      <div style={{padding:'12px 18px',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+        <button className="btn btn-ghost"style={{color:'var(--muted)',fontSize:12}}onClick={onReset}>🔄 Start fresh</button>
+        <button className="btn btn-secondary"onClick={onClose}>Done</button>
+      </div>
+    </div>
+  </div>;
+}
+
 // ── Recipe View Modal ─────────────────────────────────────────────────────────
-function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast}){
+function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast,onAddToHuckle}){
   const origServings=Math.max(1,parseInt(recipe.servings)||4);
   const[servings,setServings]=useState(origServings);
   const[metric,setMetric]=useState(false);
@@ -1224,6 +1341,7 @@ function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast})
             ?<div style={{display:'flex',gap:8,marginTop:16,justifyContent:isMobile?'flex-end':'space-between',alignItems:'center'}}>
                 {!isMobile&&<button className="btn btn-secondary"style={{flex:1}}onClick={()=>{setAddingPlan(true);setSharing(false);}}>📅 Add to meal plan</button>}
                 <button className="btn btn-secondary"style={{padding:'6px 10px'}}onClick={()=>{setSharing(true);setAddingPlan(false);}}title="Share"><svg width="15"height="15"viewBox="0 0 24 24"fill="none"stroke="currentColor"strokeWidth="2.2"strokeLinecap="round"strokeLinejoin="round"><line x1="22"y1="2"x2="11"y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+                {onAddToHuckle&&hasIngs&&<button className="btn btn-secondary"style={{padding:'5px 10px',fontSize:16,lineHeight:1}}onClick={()=>{onAddToHuckle(recipe.id);onClose();}}title="Log in Huckleberry">🫐</button>}
                 {onEdit&&<button className="btn btn-icon"style={{padding:'5px 8px'}}onClick={onEdit}><span style={{display:'inline-block',transform:'scaleX(-1)',fontSize:18,lineHeight:1}}>✏️</span></button>}
                 {!isMobile&&<button className="btn btn-secondary"onClick={onClose}>Close</button>}
                 {isMobile&&<button className="btn btn-primary"onClick={()=>{setAddingPlan(true);setSharing(false);}}>📅 Add to week</button>}
@@ -1262,6 +1380,7 @@ function RecipeViewModal({recipe,ingredients,onEdit,onClose,dispatch,showToast})
           }
         </>}
         {!dispatch&&<div style={{display:'flex',gap:8,marginTop:16,justifyContent:'flex-end'}}>
+          {onAddToHuckle&&hasIngs&&<button className="btn btn-secondary"style={{padding:'5px 10px',fontSize:16,lineHeight:1}}onClick={()=>{onAddToHuckle(recipe.id);onClose();}}title="Log in Huckleberry">🫐</button>}
           <button className="btn btn-secondary"onClick={onClose}>Close</button>
           {onEdit&&<button className="btn btn-primary"onClick={onEdit}>✏ Edit</button>}
         </div>}
@@ -1572,7 +1691,7 @@ function useIsMobile(){
   return m;
 }
 
-function MealPlanTab({state,dispatch,showToast}){
+function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
   const[viewing,setViewing]=useState(null);
   const[adding,setAdding]=useState(null); // {day,slot}
   const[planTag,setPlanTag]=useState('');
@@ -1904,7 +2023,7 @@ function MealPlanTab({state,dispatch,showToast}){
   {viewing&&<RecipeViewModal recipe={viewing}ingredients={state.ingredients}
     onEdit={()=>setViewing(null)}
     onClose={()=>setViewing(null)}
-    dispatch={dispatch}showToast={showToast}/>}
+    dispatch={dispatch}showToast={showToast}onAddToHuckle={onAddToHuckle}/>}
   </div>;
 }
 
@@ -2448,7 +2567,7 @@ function IngredientFilterSheet({ingredients,recipes,selected,onToggle,onClose}){
 }
 
 // ── Noa Tab (nanny view) ──────────────────────────────────────────────────────
-function NoaTab({state,dispatch,showToast,isNanny}){
+function NoaTab({state,dispatch,showToast,isNanny,onAddToHuckle}){
   const[search,setSearch]=useState('');
   const[catFilter,setCatFilter]=useState('');
   const[editing,setEditing]=useState(null);
@@ -2550,7 +2669,7 @@ function NoaTab({state,dispatch,showToast,isNanny}){
   </div>;
 }
 
-function RecipesTab({state,dispatch,showToast}){
+function RecipesTab({state,dispatch,showToast,onAddToHuckle}){
   const[search,setSearch]=useState('');
   const[hFilter,setHFilter]=useState('');
   const[ingFilters,setIngFilters]=useState(()=>new Set());
@@ -2694,7 +2813,7 @@ function RecipesTab({state,dispatch,showToast}){
     {viewing&&<RecipeViewModal recipe={viewing}ingredients={state.ingredients}
       onEdit={()=>{setEditing(viewing);setViewing(null);}}
       onClose={()=>setViewing(null)}
-      dispatch={dispatch}showToast={showToast}/>}
+      dispatch={dispatch}showToast={showToast}onAddToHuckle={onAddToHuckle}/>}
     {editing&&<RecipeModal recipe={editing==='new'?null:editing}ingredients={state.ingredients}allRecipes={state.recipes}
       onSave={(rec,ni)=>{dispatch({type:'SAVE_REC',rec,newIngs:ni});setEditing(null);editing!=='new'&&setViewing(rec);showToast(`${rec.name} saved!`);}}
       onDelete={id=>{dispatch({type:'DEL_REC',id});setEditing(null);setViewing(null);showToast('Deleted');}}
@@ -2927,7 +3046,7 @@ function HolidaysTab({state,dispatch,showToast}){
   {viewing&&<RecipeViewModal recipe={viewing}ingredients={state.ingredients}
       onEdit={()=>{setEditing(viewing);setViewing(null);}}
       onClose={()=>setViewing(null)}
-      dispatch={dispatch}showToast={showToast}/>}
+      dispatch={dispatch}showToast={showToast}onAddToHuckle={onAddToHuckle}/>}
   {editing&&<RecipeModal recipe={editing}ingredients={state.ingredients}allRecipes={state.recipes}
       onSave={(rec,ni)=>{dispatch({type:'SAVE_REC',rec,newIngs:ni});setEditing(null);setViewing(rec);showToast(`${rec.name} saved!`);}}
       onDelete={id=>{dispatch({type:'DEL_REC',id});setEditing(null);setViewing(null);showToast('Deleted');}}
@@ -3517,6 +3636,14 @@ function App({user,onSignOut}){
   const[showSettings,setShowSettings]=useState(false);
   const[fbDbUrl,setFbDbUrl]=useState(()=>localStorage.getItem('kitchen_fb_url')||'https://bo-s-kitchen-default-rtdb.firebaseio.com/');
   const[syncStatus,setSyncStatus]=useState('off'); // off | connecting | live | error
+  // Huckleberry logger state
+  const[huckQueue,setHuckQueue]=useState([]); // array of recipe IDs in current session
+  const[huckCopied,setHuckCopied]=useState([]); // array of ingredient IDs already copied
+  const[showHuckle,setShowHuckle]=useState(false);
+  function addToHuckle(recipeId){
+    setHuckQueue(q=>q.includes(recipeId)?q:[...q,recipeId]);
+    setShowHuckle(true);
+  }
   const isFirst=useRef(true);
   const saveTimer=useRef(null);
   const fbDbRef=useRef(null);
@@ -3695,18 +3822,33 @@ function App({user,onSignOut}){
         </button>;
       })}
     </nav>
-    {tab==='mealplan'&&<MealPlanTab state={state}dispatch={dispatch}showToast={showToast}/>}
+    {tab==='mealplan'&&<MealPlanTab state={state}dispatch={dispatch}showToast={showToast}onAddToHuckle={addToHuckle}/>}
     {tab==='needs'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='review'/>}
     {tab==='shop'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='shop'/>}
-    {tab==='recipes'&&<RecipesTab state={state}dispatch={dispatch}showToast={showToast}/>}
+    {tab==='recipes'&&<RecipesTab state={state}dispatch={dispatch}showToast={showToast}onAddToHuckle={addToHuckle}/>}
     {tab==='holidays'&&<HolidaysTab state={state}dispatch={dispatch}showToast={showToast}/>}
-    {tab==='noa'&&<NoaTab state={state}dispatch={dispatch}showToast={showToast}isNanny={isNanny}/>}
+    {tab==='noa'&&<NoaTab state={state}dispatch={dispatch}showToast={showToast}isNanny={isNanny}onAddToHuckle={addToHuckle}/>}
     {tab==='cheese'&&<CheeseTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {showSettings&&<SettingsModal state={state}dispatch={dispatch}showToast={showToast}onClose={()=>setShowSettings(false)}/>}
     {showSync&&<SyncModal state={state}syncStatus={syncStatus}fbDbUrl={fbDbUrl}
       onSetupFb={url=>{connectFirebase(url);setShowSync(false);showToast('Firebase connected! Changes sync in real-time.');}}
       onApply={merged=>{dispatch({type:'INIT',state:merged});showToast("Partner's changes applied!");}}
       onClose={()=>setShowSync(false)}/>}
+    {huckQueue.length>0&&!showHuckle&&<button
+      onClick={()=>setShowHuckle(true)}
+      style={{position:'fixed',bottom:76,right:12,zIndex:250,background:'#7b1fa2',color:'white',border:'none',borderRadius:24,padding:'9px 15px',fontSize:14,cursor:'pointer',boxShadow:'0 2px 10px rgba(0,0,0,0.3)',display:'flex',alignItems:'center',gap:6,fontFamily:'inherit',fontWeight:600}}>
+      🫐 <span style={{fontSize:12,background:'rgba(255,255,255,.25)',borderRadius:10,padding:'1px 7px'}}>{huckQueue.length}</span>
+    </button>}
+    {showHuckle&&state&&<HuckleberryModal
+      queue={huckQueue}
+      recipes={state.recipes}
+      allIngredients={state.ingredients}
+      copied={huckCopied}
+      onCopy={ingId=>setHuckCopied(c=>c.includes(ingId)?c:[...c,ingId])}
+      onAddRecipe={recId=>setHuckQueue(q=>q.includes(recId)?q:[...q,recId])}
+      onRemoveRecipe={recId=>setHuckQueue(q=>q.filter(id=>id!==recId))}
+      onReset={()=>{setHuckQueue([]);setHuckCopied([]);setShowHuckle(false);}}
+      onClose={()=>setShowHuckle(false)}/>}
     {toast&&<Toast msg={toast.msg}onUndo={toast.onUndo}onDone={()=>setToast(null)}/>}
   </div>;
 }
