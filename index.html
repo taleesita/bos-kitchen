@@ -1582,6 +1582,7 @@ function MealPlanTab({state,dispatch,showToast}){
   const[qName,setQName]=useState('');
   const[qCategory,setQCategory]=useState('');
   const[qLabel,setQLabel]=useState('');
+  const[qLabelError,setQLabelError]=useState(false);
   const[qIngsList,setQIngsList]=useState([]); // [{id,name}] chips
   const[noaTag,setNoaTag]=useState('Nutbear');
   const[noaTagExpanded,setNoaTagExpanded]=useState(false);
@@ -1782,7 +1783,7 @@ function MealPlanTab({state,dispatch,showToast}){
               />
               {qCategory&&<div style={{fontSize:11,color:'var(--noa)',marginTop:2}}>✓ {qCategory}</div>}
             </div>
-            <input className="inp"style={{flex:1,fontSize:13,textTransform:'uppercase',fontWeight:600}}placeholder="Label (e.g. RP)"value={qLabel}onChange={e=>setQLabel(e.target.value.toUpperCase())}/>
+            <input className="inp"style={{flex:1,fontSize:13,textTransform:'uppercase',fontWeight:600,borderColor:qLabelError?'var(--red)':undefined,outlineColor:qLabelError?'var(--red)':undefined}}placeholder="Label (e.g. RP)"value={qLabel}onChange={e=>{setQLabel(e.target.value.toUpperCase());setQLabelError(false);}}onBlur={()=>{if(qLabel.trim()){const dup=state.recipes.some(r=>r.noaLabel&&r.noaLabel.toUpperCase()===qLabel.trim().toUpperCase());setQLabelError(dup);}}}/>{qLabelError&&<div style={{fontSize:11,color:'var(--red)',marginTop:2}}>Label already in use</div>}
           </div>
           {/* Ingredients — chip list */}
           <div>
@@ -1831,11 +1832,12 @@ function MealPlanTab({state,dispatch,showToast}){
                 dispatch({type:'NOA_ROSTER_ADD',recId});
                 showToast&&showToast(`"${qName.trim()}" added to Noa's recipes!`);
                 setQuickAddNoa(false);
-                setQName('');setQCategory('');setQLabel('');setQIngsList([]);
-              }}>
+                setQName('');setQCategory('');setQLabel('');setQIngsList([]);setQLabelError(false);
+              }}
+              disabled={qLabelError}style={{opacity:qLabelError?0.4:1}}>
               ✓ Save Recipe
             </button>
-            <button className="btn btn-ghost btn-sm"onClick={()=>{setQuickAddNoa(false);setQName('');setQCategory('');setQLabel('');setQIngsList([]);}}>Cancel</button>
+            <button className="btn btn-ghost btn-sm"onClick={()=>{setQuickAddNoa(false);setQName('');setQCategory('');setQLabel('');setQIngsList([]);setQLabelError(false);}}>Cancel</button>
           </div>
         </div>;
       })()}
