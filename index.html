@@ -1036,7 +1036,7 @@ function HuckleberryModal({queue,recipes,allIngredients,copied,onCopy,onAddRecip
   const filteredRecs=useMemo(()=>{
     if(!search.trim())return[];
     const q=search.toLowerCase();
-    return[...recipes].filter(r=>r.name.toLowerCase().includes(q)&&!queue.includes(r.id)).sort((a,b)=>a.name.localeCompare(b.name)).slice(0,8);
+    return[...recipes].filter(r=>(r.name.toLowerCase().includes(q)||(r.noaLabel||'').toLowerCase().includes(q))&&!queue.includes(r.id)).sort((a,b)=>a.name.localeCompare(b.name)).slice(0,8);
   },[search,recipes,queue]);
 
   const copiedCount=allIngs.filter(({ing})=>copied.includes(ing.id)).length;
@@ -1063,7 +1063,8 @@ function HuckleberryModal({queue,recipes,allIngredients,copied,onCopy,onAddRecip
           <div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center'}}>
             {queue.map(recId=>{
               const rec=recipes.find(r=>r.id===recId);
-              return rec?<span key={recId}className="chip recipe"style={{paddingRight:5}}>
+              return rec?<span key={recId}className="chip recipe"style={{paddingRight:5,gap:4}}>
+                {rec.noaLabel&&<span style={{background:'var(--noa)',color:'white',fontWeight:800,fontSize:10,borderRadius:4,padding:'1px 4px',letterSpacing:'0.5px'}}>{rec.noaLabel}</span>}
                 {rec.name}
                 <button onClick={()=>onRemoveRecipe(recId)}style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13,padding:'0 0 0 3px',lineHeight:1,marginLeft:2}}>✕</button>
               </span>:null;
@@ -1074,10 +1075,11 @@ function HuckleberryModal({queue,recipes,allIngredients,copied,onCopy,onAddRecip
           {showSearch&&<div style={{marginTop:8}}>
             <input ref={searchRef}className="inp"placeholder="Search recipes…"value={search}onChange={e=>setSearch(e.target.value)}style={{marginBottom:4}}/>
             {filteredRecs.length>0&&<div style={{background:'white',border:'1px solid var(--border)',borderRadius:'var(--r-sm)',overflow:'hidden'}}>
-              {filteredRecs.map(r=><div key={r.id}style={{padding:'8px 12px',fontSize:13,cursor:'pointer',borderBottom:'1px solid var(--border)'}}
+              {filteredRecs.map(r=><div key={r.id}style={{padding:'8px 12px',fontSize:13,cursor:'pointer',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:7}}
                 onMouseEnter={e=>e.currentTarget.style.background='var(--cream)'}
                 onMouseLeave={e=>e.currentTarget.style.background='white'}
                 onClick={()=>{onAddRecipe(r.id);setSearch('');setShowSearch(false);}}>
+                {r.noaLabel&&<span style={{background:'var(--noa)',color:'white',fontWeight:800,fontSize:10,borderRadius:4,padding:'2px 5px',letterSpacing:'0.5px',flexShrink:0}}>{r.noaLabel}</span>}
                 {r.name}
               </div>)}
             </div>}
@@ -3822,10 +3824,10 @@ function App({user,onSignOut}){
         </button>;
       })}
     </nav>
-    {tab==='mealplan'&&<MealPlanTab state={state}dispatch={dispatch}showToast={showToast}onAddToHuckle={addToHuckle}/>}
+    {tab==='mealplan'&&<MealPlanTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {tab==='needs'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='review'/>}
     {tab==='shop'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='shop'/>}
-    {tab==='recipes'&&<RecipesTab state={state}dispatch={dispatch}showToast={showToast}onAddToHuckle={addToHuckle}/>}
+    {tab==='recipes'&&<RecipesTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {tab==='holidays'&&<HolidaysTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {tab==='noa'&&<NoaTab state={state}dispatch={dispatch}showToast={showToast}isNanny={isNanny}onAddToHuckle={addToHuckle}/>}
     {tab==='cheese'&&<CheeseTab state={state}dispatch={dispatch}showToast={showToast}/>}
