@@ -1013,7 +1013,7 @@ function getIngAliases(name){
 }
 
 // ── Huckleberry Logger Modal ──────────────────────────────────────────────────
-function HuckleberryModal({queue,recipes,allIngredients,copied,onCopy,onAddRecipe,onRemoveRecipe,onReset,onClose}){
+function HuckleberryModal({queue,recipes,allIngredients,copied,onToggle,onAddRecipe,onRemoveRecipe,onReset,onClose}){
   const[search,setSearch]=useState('');
   const[showSearch,setShowSearch]=useState(false);
   const searchRef=useRef(null);
@@ -1051,7 +1051,7 @@ function HuckleberryModal({queue,recipes,allIngredients,copied,onCopy,onAddRecip
         <span style={{fontSize:22,lineHeight:1}}>🫐</span>
         <div style={{flex:1}}>
           <div style={{fontWeight:700,fontSize:15}}>Huckleberry Logger</div>
-          <div style={{fontSize:12,color:'var(--muted)'}}>Copy each ingredient into Huckleberry one by one</div>
+          <div style={{fontSize:12,color:'var(--muted)'}}>Tap each ingredient after entering it in Huckleberry</div>
         </div>
         <button className="mclose"onClick={onClose}>×</button>
       </div>
@@ -1091,7 +1091,7 @@ function HuckleberryModal({queue,recipes,allIngredients,copied,onCopy,onAddRecip
         {allIngs.length>0&&<div style={{marginBottom:14}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
             <span style={{fontSize:12,fontWeight:600,color:allDone?'#4caf50':'var(--muted)'}}>
-              {allDone?'✅ All copied! Tap "Start fresh" for next meal.':`${copiedCount} / ${allIngs.length} copied`}
+              {allDone?'✅ All done! Tap "Start fresh" for next meal.':`${copiedCount} / ${allIngs.length} entered`}
             </span>
             {allIngs.length>0&&<span style={{fontSize:11,color:'var(--muted)'}}>{allIngs.length-copiedCount} remaining</span>}
           </div>
@@ -1106,18 +1106,17 @@ function HuckleberryModal({queue,recipes,allIngredients,copied,onCopy,onAddRecip
         </div>}
         {allIngs.map(({ing,qtys})=>{
           const done=copied.includes(ing.id);
-          return<div key={ing.id}style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'1px solid var(--border)',opacity:done?0.45:1,transition:'opacity .2s'}}>
-            <span style={{fontSize:22,lineHeight:1,flexShrink:0}}>{ingEmoji(ing.name)}</span>
+          return<div key={ing.id}
+            onClick={()=>onToggle(ing.id)}
+            style={{display:'flex',alignItems:'center',gap:12,padding:'11px 4px',borderBottom:'1px solid var(--border)',cursor:'pointer',userSelect:'none',WebkitUserSelect:'none',transition:'opacity .15s',opacity:done?0.45:1}}>
+            <div style={{width:26,height:26,borderRadius:6,border:`2px solid ${done?'#4caf50':'var(--border)'}`,background:done?'#4caf50':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
+              {done&&<span style={{color:'white',fontSize:14,lineHeight:1}}>✓</span>}
+            </div>
+            <span style={{fontSize:20,lineHeight:1,flexShrink:0}}>{ingEmoji(ing.name)}</span>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:14,fontWeight:500,textDecoration:done?'line-through':'none',color:done?'var(--muted)':'var(--text)'}}>{ing.name}</div>
               {qtys.length>0&&<div style={{fontSize:11,color:'var(--muted)'}}>{qtys.join(' · ')}</div>}
             </div>
-            {done
-              ?<span style={{color:'#4caf50',fontSize:20,flexShrink:0}}>✅</span>
-              :<button className="btn btn-secondary"style={{padding:'5px 11px',fontSize:12,flexShrink:0,whiteSpace:'nowrap'}}
-                onClick={()=>{navigator.clipboard.writeText(ing.name).catch(()=>{});onCopy(ing.id);}}>
-                Copy 📋
-              </button>}
           </div>;
         })}
       </div>
@@ -3852,7 +3851,7 @@ function App({user,onSignOut}){
       recipes={state.recipes}
       allIngredients={state.ingredients}
       copied={huckCopied}
-      onCopy={ingId=>setHuckCopied(c=>c.includes(ingId)?c:[...c,ingId])}
+      onToggle={ingId=>setHuckCopied(c=>c.includes(ingId)?c.filter(id=>id!==ingId):[...c,ingId])}
       onAddRecipe={recId=>setHuckQueue(q=>q.includes(recId)?q:[...q,recId])}
       onRemoveRecipe={recId=>setHuckQueue(q=>q.filter(id=>id!==recId))}
       onReset={()=>{setHuckQueue([]);setHuckCopied([]);setShowHuckle(false);}}
