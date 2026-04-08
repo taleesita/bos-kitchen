@@ -1871,9 +1871,10 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
         </div>
       </div>
       <div style={{display:'flex',flexWrap:'wrap',gap:2}}>
-        {noa.map(item=><div key={item}className="chip noa">
-          {item}<button onClick={()=>dispatch({type:'NOA_RM',item})}>×</button>
-        </div>)}
+        {noa.map(item=>{const r=state.recipes.find(x=>x.name===item);return<div key={item}className="chip noa">
+          <span style={r?{cursor:'pointer'}:{}}onClick={()=>{if(r)setViewing(r);}}>{item}</span>
+          <button onClick={()=>dispatch({type:'NOA_RM',item})}>×</button>
+        </div>;})}
         {noa.length===0&&!addingNoa&&!quickAddNoa&&<span style={{fontSize:12,color:'var(--muted)'}}>Add Noa's foods for the week</span>}
       </div>
 
