@@ -549,7 +549,16 @@ function reducer(state,action){
       if(!noa.includes(action.item))noa.push(action.item);
       return{...state,mealPlan:{...state.mealPlan,noa}};
     }
-    case'NOA_RM':return{...state,mealPlan:{...state.mealPlan,noa:(state.mealPlan.noa||[]).filter(x=>x!==action.item)}};
+    case'NOA_RM':{
+      const noa=(state.mealPlan.noa||[]).filter(x=>x!==action.item);
+      // If the recipe has no label yet, it wasn't made — remove from roster too so it
+      // doesn't linger in "Labels needed". Labeled recipes stay on the roster permanently.
+      const rec=(state.recipes||[]).find(r=>r.name===action.item);
+      const noaRoster=(rec&&!rec.noaLabel)
+        ?(state.noaRoster||[]).filter(id=>id!==rec.id)
+        :(state.noaRoster||[]);
+      return{...state,mealPlan:{...state.mealPlan,noa},noaRoster};
+    }
     case'NOA_ROSTER_ADD':{
       // Adds a recipe ID to the persistent nanny roster (never removed week-over-week)
       const roster=[...(state.noaRoster||[])];
@@ -3808,13 +3817,16 @@ function App({user,onSignOut}){
     stateRef.current=state; // keep ref in sync for async callbacks
     if(isFirst.current){isFirst.current=false;return;}
     try{localStorage.setItem('kitchen_local',JSON.stringify(state));localStorage.setItem('kitchen_data_ver',String(DATA_VER));}catch(e){}
-    if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;} // always cancel pending write first
-    if(fromFB.current){fromFB.current=false;return;} // Firebase update — save to localStorage only, never write back
+    // Firebase-triggered update: save to localStorage but KEEP any pending local write timer.
+    // Cancelling it would let Firebase win a race and permanently undo local changes
+    // (e.g. removing a chip from Noa's list).
+    if(fromFB.current){fromFB.current=false;return;}
+    // Local change: cancel previous timer and schedule a fresh write
+    if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;}
     if(!fbDbRef.current)return;
     if(!fbInitialized.current)return; // wait until we've received the first Firebase value before writing
     const stateToWrite=state;
     saveTimer.current=setTimeout(()=>{fbWrite(fbDbRef.current,stateToWrite).catch(e=>console.error('[fbWrite] failed:',e.message));},800);
-    return()=>{if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;}};
   },[state]);
 
   // Firebase setup — async so SDK is always loaded before use
