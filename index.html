@@ -755,6 +755,9 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   const[imgUrlInput,setImgUrlInput]=useState(recipe?.imageUrl||'');
   const[imgMode,setImgMode]=useState(''); // ''=collapsed, 'url'=url input, 'file'=file picked
   const fileInputRef=useRef();
+  const[noaLabel,setNoaLabel]=useState(recipe?.noaLabel||'');
+  const[noaLabelError,setNoaLabelError]=useState(false);
+  const isNutbear=tags.includes('Nutbear')||holiday==='Nutbear'||!!(recipe?.noaLabel);
   const[confirm,setConfirm]=useState(false);
   const[dragIdx,setDragIdx]=useState(null);
   const[dragOverIdx,setDragOverIdx]=useState(null);
@@ -785,7 +788,7 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   function handleIngChange(newRefs,newIng){setRefs(newRefs);if(newIng)setNewIngs(n=>[...n,newIng]);}
   function rmRef(id){setRefs(r=>r.filter(x=>x.id!==id));}
   function updQty(id,qty){setRefs(r=>r.map(x=>x.id===id?{...x,quantity:qty}:x));}
-  function save(){if(!name.trim())return;const inst=instructions.split('\n').map(s=>s.trim()).filter(Boolean);const tMin=parseInt(time)||null;onSave({id:recipe?.id||uid(),name:name.trim(),holiday,url,sourceUrl:sourceUrl||undefined,tags,ingredientRefs:refs,instructions:inst,imageUrl:imageUrl||undefined,servings:recipe?.servings,...(tMin?{time:tMin}:{})},newIngs);}
+  function save(){if(!name.trim())return;const inst=instructions.split('\n').map(s=>s.trim()).filter(Boolean);const tMin=parseInt(time)||null;const nl=noaLabel.trim().toUpperCase()||undefined;onSave({id:recipe?.id||uid(),name:name.trim(),holiday,url,sourceUrl:sourceUrl||undefined,tags,ingredientRefs:refs,instructions:inst,imageUrl:imageUrl||undefined,servings:recipe?.servings,...(tMin?{time:tMin}:{}),...(nl?{noaLabel:nl}:{noaLabel:undefined})},newIngs);}
   return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget&&!editing)onClose();}}>
     <div className="modal">
       {imageUrl&&<img src={proxyImg(imageUrl)}data-orig={imageUrl}alt=""style={{width:'100%',height:160,objectFit:'cover',borderRadius:'var(--r) var(--r) 0 0',display:'block'}}onError={imgOnError}/>}
@@ -799,6 +802,15 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
       </div>
       <div className="fg"><label className="lbl">Recime URL</label><input className="inp"value={url}onChange={e=>setUrl(e.target.value)}placeholder="https://recime.app/…"/></div>
       <div className="fg"><label className="lbl">Original source (Instagram, blog…)</label><input className="inp"value={sourceUrl}onChange={e=>setSourceUrl(e.target.value)}placeholder="https://instagram.com/…"/></div>
+      {isNutbear&&<div className="fg">
+        <label className="lbl">Noa label <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,color:'var(--muted)',fontSize:10}}>(short code shown on Noa tab, e.g. RP)</span></label>
+        <input className="inp"style={{textTransform:'uppercase',fontWeight:600,letterSpacing:'0.5px',borderColor:noaLabelError?'var(--red)':undefined}}
+          value={noaLabel}
+          onChange={e=>{setNoaLabel(e.target.value.toUpperCase());setNoaLabelError(false);}}
+          onBlur={()=>{if(noaLabel.trim()){const dup=(allRecipes||[]).some(r=>r.id!==(recipe?.id)&&r.noaLabel&&r.noaLabel.toUpperCase()===noaLabel.trim().toUpperCase());setNoaLabelError(dup);}}}
+          placeholder="e.g. RP"/>
+        {noaLabelError&&<div style={{fontSize:11,color:'var(--red)',marginTop:2}}>Label already in use</div>}
+      </div>}
       <div className="fg">
         <label className="lbl">Photo</label>
         {imageUrl&&<div style={{position:'relative',marginBottom:6}}>
@@ -1698,6 +1710,7 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
   const[viewing,setViewing]=useState(null);
   const[adding,setAdding]=useState(null); // {day,slot}
   const[planTag,setPlanTag]=useState('');
+  const[editing,setEditing]=useState(null);
   const[addingMisc,setAddingMisc]=useState(false);
   const[addingNoa,setAddingNoa]=useState(false);
   const[quickAddNoa,setQuickAddNoa]=useState(false); // quick-add new Noa recipe form
@@ -2025,9 +2038,13 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
       </div>}
     </div>
   {viewing&&<RecipeViewModal recipe={viewing}ingredients={state.ingredients}
-    onEdit={()=>setViewing(null)}
+    onEdit={()=>{setEditing(viewing);setViewing(null);}}
     onClose={()=>setViewing(null)}
     dispatch={dispatch}showToast={showToast}onAddToHuckle={onAddToHuckle}/>}
+  {editing&&<RecipeModal recipe={editing}ingredients={state.ingredients}allRecipes={state.recipes}
+    onSave={(rec,ni)=>{dispatch({type:'SAVE_REC',rec,newIngs:ni});setEditing(null);showToast(`${rec.name} saved!`);}}
+    onDelete={id=>{dispatch({type:'DEL_REC',id});setEditing(null);showToast('Deleted');}}
+    onClose={()=>setEditing(null)}/>}
   </div>;
 }
 
@@ -2639,6 +2656,33 @@ function NoaTab({state,dispatch,showToast,isNanny,onAddToHuckle}){
       </div>}
 
       {filtered.length===0&&<div className="empty"><div className="empty-icon">🔍</div>No recipes match</div>}
+
+      {/* Missing-labels quick-entry table */}
+      {(()=>{const unlabeled=noaRecipes.filter(r=>!r.noaLabel);if(!unlabeled.length)return null;
+        return<div style={{background:'#fff8e8',border:'1px solid #f0c040',borderRadius:'var(--r)',padding:'10px 12px',marginBottom:10}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#7a5500',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:8}}>⚠ Labels needed ({unlabeled.length})</div>
+          <div style={{display:'grid',gap:6}}>
+            {unlabeled.map(r=><div key={r.id}style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{flex:1,fontSize:13,fontWeight:500,color:'var(--text)',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</span>
+              <input
+                style={{width:64,border:'1.5px solid #f0c040',borderRadius:6,padding:'4px 7px',fontSize:12,fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',textAlign:'center',outline:'none',background:'white'}}
+                defaultValue={r.noaLabel||''}
+                placeholder="e.g. LP"
+                maxLength={4}
+                onFocus={e=>e.target.style.borderColor='var(--noa)'}
+                onBlur={e=>{
+                  e.target.style.borderColor='#f0c040';
+                  const v=e.target.value.trim().toUpperCase();
+                  if(!v)return;
+                  const dup=state.recipes.some(x=>x.id!==r.id&&x.noaLabel&&x.noaLabel.toUpperCase()===v);
+                  if(dup){e.target.style.borderColor='var(--red)';e.target.title='Label already in use';}
+                  else if(v!==(r.noaLabel||'')){dispatch({type:'SAVE_REC',rec:{...r,noaLabel:v},newIngs:[]});}
+                }}
+              />
+            </div>)}
+          </div>
+        </div>;
+      })()}
 
       {/* Recipe cards */}
       <div style={{display:'grid',gap:8}}>
