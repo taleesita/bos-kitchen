@@ -512,7 +512,14 @@ function reducer(state,action){
       const exists=state.recipes.find(r=>r.id===action.rec.id);
       const recipes=exists?state.recipes.map(r=>r.id===action.rec.id?action.rec:r):[...state.recipes,action.rec];
       const ingredients=action.newIngs?[...state.ingredients,...action.newIngs.filter(ni=>!state.ingredients.find(i=>i.id===ni.id))]:state.ingredients;
-      return{...state,recipes,ingredients};
+      // If recipe was renamed, update its name in the noa weekly list (which stores names as strings)
+      const oldName=exists?.name;
+      const newName=action.rec.name;
+      const noa=(oldName&&oldName!==newName&&state.mealPlan?.noa)
+        ?state.mealPlan.noa.map(n=>n===oldName?newName:n)
+        :state.mealPlan?.noa;
+      const mealPlan=noa!==state.mealPlan?.noa?{...state.mealPlan,noa}:state.mealPlan;
+      return{...state,recipes,ingredients,mealPlan};
     }
     case'DEL_REC':return{...state,recipes:state.recipes.filter(r=>r.id!==action.id)};
     case'MEAL_ADD_REC':{
