@@ -448,19 +448,30 @@ function getUserData(state){
     const s=(window.SEED.ingredients||[]).find(x=>x.id===i.id);
     return s&&(s.store!==i.store||s.name!==i.name);
   });
+  // Save overrides for seed recipe fields (noaLabel, noaCategory, name, sourceUrl)
+  const recOv=(state.recipes||[]).filter(r=>SEED_REC_IDS.has(r.id)).reduce((acc,r)=>{
+    const s=(window.SEED.recipes||[]).find(x=>x.id===r.id);if(!s)return acc;
+    const ov={id:r.id};let changed=false;
+    if(r.noaLabel!==(s.noaLabel||undefined)){ov.noaLabel=r.noaLabel;changed=true;}
+    if(r.noaCategory!==(s.noaCategory||undefined)){ov.noaCategory=r.noaCategory;changed=true;}
+    if(r.name!==s.name){ov.name=r.name;changed=true;}
+    if(r.sourceUrl!==(s.sourceUrl||undefined)){ov.sourceUrl=r.sourceUrl;changed=true;}
+    if(changed)acc.push(ov);return acc;
+  },[]);
   return{v:1,mealPlan:state.mealPlan,shopping:state.shopping,holidays:state.holidays||{},
     customRecipes:(state.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id)),
-    customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv,
+    customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv,recOv,
     noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[]};
 }
 function encodeSync(state){return btoa(unescape(encodeURIComponent(JSON.stringify(getUserData(state)))));}
 function decodeSync(code,cur){
   const ud=JSON.parse(decodeURIComponent(escape(atob(code.trim()))));
   const seedIngs=(window.SEED.ingredients||[]).map(i=>{const ov=(ud.ingOv||[]).find(o=>o.id===i.id);return ov?{...i,name:ov.name||i.name,store:ov.store}:i;});
+  const seedRecs=(window.SEED.recipes||[]).map(r=>{const ov=(ud.recOv||[]).find(o=>o.id===r.id);return ov?{...r,...ov}:r;});
   function mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
   const myRecs=(cur.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id));
   const myIngs=(cur.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id));
-  return{recipes:[...(window.SEED.recipes||[]),...mergeById(myRecs,ud.customRecipes||[])],
+  return{recipes:[...seedRecs,...mergeById(myRecs,ud.customRecipes||[])],
     ingredients:[...seedIngs,...mergeById(myIngs,ud.customIngs||[])],
     mealPlan:ud.mealPlan,shopping:ud.shopping,holidays:ud.holidays||{},
     noaRoster:Array.isArray(ud.noaRoster)?ud.noaRoster:[],
@@ -1030,6 +1041,7 @@ function getIngAliases(name){
 // ── Label Row (missing-label quick-entry) ────────────────────────────────────
 function LabelRow({recipe,allRecipes,dispatch,onView}){
   const[val,setVal]=useState(recipe.noaLabel||'');
+  const[catVal,setCatVal]=useState(recipe.noaCategory||'');
   const[err,setErr]=useState(false);
   const[saved,setSaved]=useState(false);
   function save(){
@@ -1037,32 +1049,43 @@ function LabelRow({recipe,allRecipes,dispatch,onView}){
     if(!v)return;
     const dup=(allRecipes||[]).some(r=>r.id!==recipe.id&&r.noaLabel&&r.noaLabel.toUpperCase()===v);
     if(dup){setErr(true);return;}
-    dispatch({type:'SAVE_REC',rec:{...recipe,noaLabel:v},newIngs:[]});
+    dispatch({type:'SAVE_REC',rec:{...recipe,noaLabel:v,...(catVal.trim()?{noaCategory:catVal.trim()}:{})},newIngs:[]});
     setSaved(true);setTimeout(()=>setSaved(false),1500);
     setErr(false);
   }
-  return<div style={{display:'flex',alignItems:'center',gap:8}}>
-    <span style={{flex:1,fontSize:13,fontWeight:500,color:'var(--sage-dark)',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted',textDecorationColor:'var(--sage-light)'}}
-      onClick={()=>onView&&onView(recipe)}>{recipe.name}</span>
-    <div style={{display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
-      <input
-        style={{width:58,border:`1.5px solid ${err?'var(--red)':saved?'#4caf50':'#f0c040'}`,borderRadius:6,padding:'4px 6px',fontSize:12,fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',textAlign:'center',outline:'none',background:'white',transition:'border-color .2s'}}
-        value={val}
-        placeholder="LP"
-        maxLength={4}
-        onChange={e=>{setVal(e.target.value.toUpperCase());setErr(false);setSaved(false);}}
-        onKeyDown={e=>{if(e.key==='Enter')save();}}
-        title={err?'Label already in use':''}
-      />
-      <button onClick={save}
-        style={{background:saved?'#4caf50':'var(--noa)',color:'white',border:'none',borderRadius:6,padding:'4px 8px',fontSize:12,fontWeight:700,cursor:'pointer',transition:'background .2s',flexShrink:0}}>
-        {saved?'✓':'Save'}
-      </button>
-      <button onClick={()=>dispatch({type:'NOA_ROSTER_RM',recId:recipe.id})}
-        title="Remove from Noa list"
-        style={{background:'none',border:'1px solid var(--border)',borderRadius:6,padding:'4px 7px',fontSize:12,color:'var(--muted)',cursor:'pointer',flexShrink:0}}>
-        ✕
-      </button>
+  return<div style={{marginBottom:2}}>
+    <div style={{display:'flex',alignItems:'center',gap:6}}>
+      <span style={{flex:1,fontSize:13,fontWeight:500,color:'var(--sage-dark)',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted',textDecorationColor:'var(--sage-light)'}}
+        onClick={()=>onView&&onView(recipe)}>{recipe.name}</span>
+      <div style={{display:'flex',gap:4,alignItems:'flex-start',flexShrink:0}}>
+        <input list="noa-cat-opts"
+          style={{width:96,border:'1.5px solid #ccc',borderRadius:6,padding:'4px 6px',fontSize:12,outline:'none',background:'white',textTransform:'capitalize'}}
+          value={catVal}
+          placeholder="Category"
+          onChange={e=>setCatVal(e.target.value)}
+          onKeyDown={e=>{if(e.key==='Enter')save();}}
+        />
+        <div style={{display:'flex',flexDirection:'column',gap:0}}>
+          <input
+            style={{width:52,border:`1.5px solid ${err?'var(--red)':saved?'#4caf50':'#f0c040'}`,borderRadius:6,padding:'4px 5px',fontSize:12,fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',textAlign:'center',outline:'none',background:'white',transition:'border-color .2s'}}
+            value={val}
+            placeholder="LP"
+            maxLength={4}
+            onChange={e=>{setVal(e.target.value.toUpperCase());setErr(false);setSaved(false);}}
+            onKeyDown={e=>{if(e.key==='Enter')save();}}
+          />
+          {err&&<div style={{fontSize:10,color:'var(--red)',marginTop:1,whiteSpace:'nowrap'}}>Label taken</div>}
+        </div>
+        <button onClick={save}
+          style={{background:saved?'#4caf50':'var(--noa)',color:'white',border:'none',borderRadius:6,padding:'4px 8px',fontSize:12,fontWeight:700,cursor:'pointer',transition:'background .2s',flexShrink:0,alignSelf:'flex-start'}}>
+          {saved?'✓':'Save'}
+        </button>
+        <button onClick={()=>dispatch({type:'NOA_ROSTER_RM',recId:recipe.id})}
+          title="Remove from Noa list"
+          style={{background:'none',border:'1px solid var(--border)',borderRadius:6,padding:'4px 7px',fontSize:12,color:'var(--muted)',cursor:'pointer',flexShrink:0,alignSelf:'flex-start'}}>
+          ✕
+        </button>
+      </div>
     </div>
   </div>;
 }
@@ -3758,7 +3781,8 @@ function App({user,onSignOut}){
         function _mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
         const customRecs=(parsed.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id));
         const customIngs=(parsed.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id));
-        parsed.recipes=[...(window.SEED.recipes||[]),..._mergeById([],customRecs)];
+        const _seedRecs=(window.SEED.recipes||[]).map(r=>{const ov=(parsed.recOv||[]).find(o=>o.id===r.id);return ov?{...r,...ov}:r;});
+        parsed.recipes=[..._seedRecs,..._mergeById([],customRecs)];
         parsed.ingredients=[...(window.SEED.ingredients||[]),..._mergeById([],customIngs)];
         // Always include NOA_SEED_ROSTER so Noa tab is pre-populated
         parsed.noaRoster=[...new Set([...NOA_SEED_ROSTER,...(Array.isArray(parsed.noaRoster)?parsed.noaRoster:[])])];
@@ -3840,10 +3864,11 @@ function App({user,onSignOut}){
             const seedIngs=(window.SEED.ingredients||[]).map(i=>{
               const ov=(ud.ingOv||[]).find(o=>o.id===i.id);return ov?{...i,name:ov.name||i.name,store:ov.store}:i;
             });
+            const seedRecs=(window.SEED.recipes||[]).map(r=>{const ov=(ud.recOv||[]).find(o=>o.id===r.id);return ov?{...r,...ov}:r;});
             function mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
             const safeShopping=ud.shopping||{needed:[],pickedUp:[]};
             const newState={
-              recipes:[...(window.SEED.recipes||[]),...mergeById([],ud.customRecipes||[])],
+              recipes:[...seedRecs,...mergeById([],ud.customRecipes||[])],
               ingredients:[...seedIngs,...mergeById([],ud.customIngs||[])],
               mealPlan:safeMp,
               shopping:{needed:Array.isArray(safeShopping.needed)?safeShopping.needed:[],
