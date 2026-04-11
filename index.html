@@ -456,9 +456,6 @@ function getUserData(state){
     if(r.noaCategory!==(s.noaCategory||undefined)){ov.noaCategory=r.noaCategory;changed=true;}
     if(r.name!==s.name){ov.name=r.name;changed=true;}
     if(r.sourceUrl!==(s.sourceUrl||undefined)){ov.sourceUrl=r.sourceUrl;changed=true;}
-    const rRefs=JSON.stringify((r.ingredientRefs||[]).map(function(x){return x.id;}).sort());
-    const sRefs=JSON.stringify((s.ingredientRefs||[]).map(function(x){return x.id;}).sort());
-    if(rRefs!==sRefs){ov.ingredientRefs=r.ingredientRefs||[];changed=true;}
     if(changed)acc.push(ov);return acc;
   },[]);
   return{v:1,mealPlan:state.mealPlan,shopping:state.shopping,holidays:state.holidays||{},
@@ -672,7 +669,7 @@ function StoreBadge({store}){
 }
 
 // ── Searchable dropdown ──────────────────────────────────────────────────────
-function SearchDrop({items,onSelect,placeholder,allowNew=false,className='',onPasteMulti,noResultsHint}){
+function SearchDrop({items,onSelect,placeholder,allowNew=false,className='',onPasteMulti}){
   const[q,setQ]=useState('');
   const[open,setOpen]=useState(false);
   const ref=useRef();
@@ -704,10 +701,9 @@ function SearchDrop({items,onSelect,placeholder,allowNew=false,className='',onPa
       {filtered.map(i=><div key={i.id||i.label} className="dd-item"onMouseDown={()=>pick(i)}>
         {i.label}{i.sub&&<span style={{fontSize:11,color:'var(--muted)',marginLeft:6}}>· {i.sub}</span>}
       </div>)}
-      {filtered.length===0&&!q.trim()&&<div className="dd-empty">Start typing…</div>}
-      {filtered.length===0&&q.trim()&&noResultsHint&&<div className="dd-empty" style={{fontStyle:'italic',color:'var(--muted)',padding:'6px 10px'}}>{noResultsHint}</div>}
       {allowNew&&q.trim()&&!filtered.find(i=>i.label.toLowerCase()===q.toLowerCase())&&
         <div className="dd-item new"onMouseDown={pickNew}>+ Add "{q.trim()}"</div>}
+      {filtered.length===0&&!q.trim()&&<div className="dd-empty">Start typing…</div>}
     </div>}
   </div>;
 }
@@ -1069,10 +1065,6 @@ function LabelRow({recipe,allRecipes,dispatch,onView}){
   const[catVal,setCatVal]=useState(recipe.noaCategory||'');
   const[err,setErr]=useState(false);
   const[saved,setSaved]=useState(false);
-  const catOptions=useMemo(
-    function(){return[...new Set((allRecipes||[]).filter(function(r){return r.holiday==='Nutbear'||(r.tags||[]).includes('Nutbear');}).map(function(r){return r.noaCategory||'';}).filter(Boolean))].sort();},
-    [allRecipes]
-  );
   function save(){
     const v=val.trim().toUpperCase();
     if(!v)return;
@@ -1087,14 +1079,13 @@ function LabelRow({recipe,allRecipes,dispatch,onView}){
       <span style={{flex:1,fontSize:13,fontWeight:500,color:'var(--sage-dark)',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted',textDecorationColor:'var(--sage-light)'}}
         onClick={()=>onView&&onView(recipe)}>{recipe.name}</span>
       <div style={{display:'flex',gap:4,alignItems:'flex-start',flexShrink:0}}>
-        <select
-          style={{width:110,border:'1.5px solid #ccc',borderRadius:6,padding:'4px 6px',fontSize:12,outline:'none',background:'white',textTransform:'capitalize',color:catVal?'inherit':'var(--muted)',cursor:'pointer'}}
+        <input list="noa-cat-opts"
+          style={{width:96,border:'1.5px solid #ccc',borderRadius:6,padding:'4px 6px',fontSize:12,outline:'none',background:'white',textTransform:'capitalize'}}
           value={catVal}
+          placeholder="Category"
           onChange={e=>setCatVal(e.target.value)}
-        >
-          <option value="">Category</option>
-          {catOptions.map(function(c){return <option key={c} value={c}>{c}</option>;})}
-        </select>
+          onKeyDown={e=>{if(e.key==='Enter')save();}}
+        />
         <div style={{display:'flex',flexDirection:'column',gap:0}}>
           <input
             style={{width:52,border:`1.5px solid ${err?'var(--red)':saved?'#4caf50':'#f0c040'}`,borderRadius:6,padding:'4px 5px',fontSize:12,fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',textAlign:'center',outline:'none',background:'white',transition:'border-color .2s'}}
@@ -2121,7 +2112,6 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
               );
             }
           }}
-          noResultsHint={noaTag ? 'No matches in the ' + noaTag + ' cookbook — clear the filter to search all' : undefined}
           placeholder="Search or paste a list (comma-separated)…"
           allowNew={true}
           onPasteMulti={items=>{
