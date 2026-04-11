@@ -673,7 +673,7 @@ function StoreBadge({store}){
 }
 
 // ── Searchable dropdown ──────────────────────────────────────────────────────
-function SearchDrop({items,onSelect,placeholder,allowNew=false,className='',onPasteMulti,noResultsMsg}){
+function SearchDrop({items,onSelect,placeholder,allowNew=false,className='',onPasteMulti,noResultsHint}){
   const[q,setQ]=useState('');
   const[open,setOpen]=useState(false);
   const ref=useRef();
@@ -706,7 +706,7 @@ function SearchDrop({items,onSelect,placeholder,allowNew=false,className='',onPa
         {i.label}{i.sub&&<span style={{fontSize:11,color:'var(--muted)',marginLeft:6}}>· {i.sub}</span>}
       </div>)}
       {filtered.length===0&&!q.trim()&&<div className="dd-empty">Start typing…</div>}
-      {filtered.length===0&&q.trim()&&noResultsMsg&&<div className="dd-empty"style={{fontStyle:'italic',color:'var(--muted)',padding:'6px 10px'}}>{noResultsMsg}</div>}
+      {filtered.length===0&&q.trim()&&noResultsHint&&<div className="dd-empty" style={{fontStyle:'italic',color:'var(--muted)',padding:'6px 10px'}}>{noResultsHint}</div>}
       {allowNew&&q.trim()&&!filtered.find(i=>i.label.toLowerCase()===q.toLowerCase())&&
         <div className="dd-item new"onMouseDown={pickNew}>+ Add "{q.trim()}"</div>}
     </div>}
@@ -2103,7 +2103,7 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
               ...[...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).map(i=>({id:'ing_'+i.id,label:i.name,sub:i.store||'ingredient'})).filter(i=>!noaSet.has(i.label.toLowerCase())),
             ];
           })()}
-          noResultsMsg={noaTag?`No matches in "${noaTag}" cookbook — clear the filter to search all`:undefined}
+          noResultsHint={noaTag?('No matches in the '+noaTag+' cookbook \u2014 clear the filter to search all'):undefined}
           onSelect={item=>{
             dispatch({type:'NOA_ADD',item:item.label});
             // If it's an existing recipe, also add to persistent nanny roster
