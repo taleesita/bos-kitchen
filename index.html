@@ -1940,11 +1940,14 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
           items={(()=>{const miscSet=new Set((misc||[]).map(x=>x.toLowerCase()));return[...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).map(i=>({id:i.id,label:i.name,sub:i.store})).filter(i=>!miscSet.has(i.label.toLowerCase()));})()}
           onSelect={item=>{
             dispatch({type:'MISC_ADD',item:item.label});
+            let miscIngId=item.id;
             if(item.isNew){
               const newId=uid();
               dispatch({type:'SAVE_ING',ing:{id:newId,name:item.label,store:''}});
-              showToast&&showToast(`"${item.label}" added to misc + ingredients!`,()=>{dispatch({type:'MISC_RM',item:item.label});dispatch({type:'DEL_ING',id:newId});});
+              showToast&&showToast('"'+item.label+'" added to misc + ingredients!',()=>{dispatch({type:'MISC_RM',item:item.label});dispatch({type:'DEL_ING',id:newId});});
+              miscIngId=newId;
             }
+            if(miscIngId&&!(state.shopping.needed||[]).includes(miscIngId)){dispatch({type:'TOGGLE_NEED',id:miscIngId});}
           }}
           placeholder="Search or paste a list (comma-separated)…"
           allowNew={true}
@@ -1954,9 +1957,11 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
               dispatch({type:'MISC_ADD',item:label});
               const existsIng=state.ingredients.find(i=>i.name.toLowerCase()===label.toLowerCase());
               const existsRec=state.recipes.find(r=>r.name.toLowerCase()===label.toLowerCase());
-              if(!existsIng&&!existsRec){const ni={id:uid(),name:label,store:''};dispatch({type:'SAVE_ING',ing:ni});newIngsCreated.push(label);}
+              let pIngId=existsIng?existsIng.id:null;
+              if(!existsIng&&!existsRec){const ni={id:uid(),name:label,store:''};dispatch({type:'SAVE_ING',ing:ni});newIngsCreated.push(label);pIngId=ni.id;}
+              if(pIngId&&!(state.shopping.needed||[]).includes(pIngId)){dispatch({type:'TOGGLE_NEED',id:pIngId});}
             });
-            showToast&&showToast(`${items.length} items added${newIngsCreated.length?` (${newIngsCreated.length} new ingredients created)`:''}!`);
+            showToast&&showToast(items.length+' items added'+(newIngsCreated.length?' ('+newIngsCreated.length+' new ingredients created)':'')+'!');
             setAddingMisc(false);
           }}
         />
@@ -2099,26 +2104,28 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
               :state.recipes;
             const noaSet=new Set((noa||[]).map(x=>x.toLowerCase()));
             return[
-              // Recipes first so they don't get buried under 100+ ingredients
-              ...[...recs].sort((a,b)=>a.name.localeCompare(b.name)).map(r=>({id:'rec_'+r.id,label:r.name,sub:'recipe'})).filter(r=>!noaSet.has(r.label.toLowerCase())),
-              // Ingredients after
+              // Ingredients first
               ...[...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).map(i=>({id:'ing_'+i.id,label:i.name,sub:i.store||'ingredient'})).filter(i=>!noaSet.has(i.label.toLowerCase())),
+              // Recipes after
+              ...[...recs].sort((a,b)=>a.name.localeCompare(b.name)).map(r=>({id:'rec_'+r.id,label:r.name,sub:'recipe'})).filter(r=>!noaSet.has(r.label.toLowerCase())),
             ];
           })()}
           onSelect={item=>{
             dispatch({type:'NOA_ADD',item:item.label});
-            // If it's an existing recipe, also add to persistent nanny roster
             if(!item.isNew&&item.id.startsWith('rec_')){
+              // Recipe: add to roster, don't auto-check needs
               const recId=item.id.replace('rec_','');
               dispatch({type:'NOA_ROSTER_ADD',recId});
-            }
-            if(item.isNew){
-              const newId=uid();
-              dispatch({type:'SAVE_ING',ing:{id:newId,name:item.label,store:''}});
-              showToast&&showToast(
-                `"${item.label}" added to Noa's list + ingredients!`,
-                ()=>{dispatch({type:'NOA_RM',item:item.label});dispatch({type:'DEL_ING',id:newId});}
-              );
+            } else {
+              // Ingredient (existing or new): auto-check needs
+              let noaIngId=item.isNew?null:item.id.replace('ing_','');
+              if(item.isNew){
+                const newId=uid();
+                dispatch({type:'SAVE_ING',ing:{id:newId,name:item.label,store:''}});
+                showToast&&showToast('"'+item.label+'" added to Noa\'s list + ingredients!',()=>{dispatch({type:'NOA_RM',item:item.label});dispatch({type:'DEL_ING',id:newId});});
+                noaIngId=newId;
+              }
+              if(noaIngId&&!(state.shopping.needed||[]).includes(noaIngId)){dispatch({type:'TOGGLE_NEED',id:noaIngId});}
             }
           }}
           noResultsHint={noaTag ? 'No matches in the ' + noaTag + ' cookbook — clear the filter to search all' : undefined}
@@ -2130,13 +2137,15 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
               dispatch({type:'NOA_ADD',item:label});
               const existsIng=state.ingredients.find(i=>i.name.toLowerCase()===label.toLowerCase());
               const existsRec=state.recipes.find(r=>r.name.toLowerCase()===label.toLowerCase());
-              if(!existsIng&&!existsRec){
-                const ni={id:uid(),name:label,store:''};
-                dispatch({type:'SAVE_ING',ing:ni});
-                newIngsCreated.push(label);
+              if(existsRec){
+                // Recipe: don't auto-check needs
+              } else {
+                let npIngId=existsIng?existsIng.id:null;
+                if(!existsIng){const ni={id:uid(),name:label,store:''};dispatch({type:'SAVE_ING',ing:ni});newIngsCreated.push(label);npIngId=ni.id;}
+                if(npIngId&&!(state.shopping.needed||[]).includes(npIngId)){dispatch({type:'TOGGLE_NEED',id:npIngId});}
               }
             });
-            showToast&&showToast(`${items.length} items added${newIngsCreated.length?` (${newIngsCreated.length} new ingredients created)`:''}!`);
+            showToast&&showToast(items.length+' items added'+(newIngsCreated.length?' ('+newIngsCreated.length+' new ingredients created)':'')+'!');
             setAddingNoa(false);
           }}
         />
@@ -2156,7 +2165,7 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
 
 // ── Shopping Tab ──────────────────────────────────────────────────────────────
 // Render a single shopping item row
-function ShopRow({item,checked,onCheck,showStore,showRecipe,showQty,onSaveIng,onViewRecipe}){
+function ShopRow({item,checked,onCheck,showStore,showRecipe,showQty,onSaveIng,onViewRecipe,recipeNames}){
 const[rowEditing,setRowEditing]=useState(false);
 const[rowEditData,setRowEditData]=useState(null);
 const qtyRecipes=new Set(item.qtys.map(q=>q.recipe));
@@ -2180,13 +2189,13 @@ return<div className="shop-item">
   <div style={{flex:1}}>
     <div className="sname">{item.name}</div>
     {showRecipe&&(item.qtys.length>0||plainSources.length>0)&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:3}}>
-      {item.qtys.map((q,i)=><div key={i}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,display:'flex',flexDirection:'column',maxWidth:160,cursor:onViewRecipe?'pointer':'default'}} onClick={onViewRecipe?()=>onViewRecipe(q.recipe):undefined} title={onViewRecipe?'View recipe':undefined}>
+      {item.qtys.map((q,i)=>{const isRec=recipeNames&&recipeNames.has(q.recipe);return<div key={i}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,display:'flex',flexDirection:'column',maxWidth:160,cursor:isRec?'pointer':'default'}} onClick={isRec?()=>onViewRecipe(q.recipe):undefined} title={isRec?'View recipe':undefined}>
         <span style={{color:'var(--sage-dark)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q.recipe}</span>
         {showQty&&q.qty&&<span style={{color:'var(--text)',fontWeight:400}}>{q.qty}</span>}
-      </div>)}
-      {plainSources.map(s=><div key={s}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,maxWidth:160,cursor:onViewRecipe?'pointer':'default'}} onClick={onViewRecipe?()=>onViewRecipe(s):undefined} title={onViewRecipe?'View recipe':undefined}>
+      </div>;})}
+      {plainSources.map(s=>{const isRec=recipeNames&&recipeNames.has(s);return<div key={s}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,maxWidth:160,cursor:isRec?'pointer':'default'}} onClick={isRec?()=>onViewRecipe(s):undefined} title={isRec?'View recipe':undefined}>
         <span style={{color:'var(--sage-dark)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}>{s}</span>
-      </div>)}
+      </div>;})};
     </div>}
   </div>
   {showStore&&<StoreBadge store={item.store}/>}
@@ -2200,6 +2209,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
   const[showQty,setShowQty]=useState(false);
   const[viewing,setViewing]=useState(null);
   const[editing,setEditing]=useState(null);
+  const recipeNames=useMemo(function(){return new Set((state.recipes||[]).map(function(r){return r.name;}));},[state.recipes]);
   function onViewRecipe(recipeName){
     const r=(state.recipes||[]).find(function(x){return x.name===recipeName||x.id===recipeName;});
     if(r)setViewing(r);
@@ -2340,7 +2350,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
           const isKnownIng=state.ingredients.find(i=>i.id===item.id);
           return<ShopRow key={item.id}showRecipe={showRecipe}showQty={showQty}item={item}
             checked={needed.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_NEED',id:item.id})}showStore={true}
-            onViewRecipe={onViewRecipe}
+            onViewRecipe={onViewRecipe}recipeNames={recipeNames}
             onSaveIng={isKnownIng?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/>;
         })}
       </div>
@@ -2377,7 +2387,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
               }
               const isKnownIng2=state.ingredients.find(i=>i.id===item.id);
               return<React.Fragment key={item.id}>{divider}<ShopRow item={item}showQty={showQty}showRecipe={showRecipe}checked={pickedUp.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_PICK',id:item.id})}showStore={false}
-                onViewRecipe={onViewRecipe}
+                onViewRecipe={onViewRecipe}recipeNames={recipeNames}
                 onSaveIng={isKnownIng2?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/></React.Fragment>;
             })}
           </div>
