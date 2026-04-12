@@ -2195,7 +2195,8 @@ return<div className="shop-item">
       </div>;})}
       {plainSources.map(s=>{const isRec=recipeNames&&recipeNames.has(s);return<div key={s}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,maxWidth:160,cursor:isRec?'pointer':'default'}} onClick={isRec?()=>onViewRecipe(s):undefined} title={isRec?'View recipe':undefined}>
         <span style={{color:'var(--sage-dark)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}>{s}</span>
-      </div>;})};
+      </div>;})}
+
     </div>}
   </div>
   {showStore&&<StoreBadge store={item.store}/>}
