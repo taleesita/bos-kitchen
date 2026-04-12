@@ -825,7 +825,7 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   function handleIngChange(newRefs,newIng){setRefs(newRefs);if(newIng)setNewIngs(n=>[...n,newIng]);}
   function rmRef(id){setRefs(r=>r.filter(x=>x.id!==id));}
   function updQty(id,qty){setRefs(r=>r.map(x=>x.id===id?{...x,quantity:qty}:x));}
-  function save(){if(!name.trim())return;const inst=instructions.split('\n').map(s=>s.trim()).filter(Boolean);const tMin=parseInt(time)||null;const nl=noaLabel.trim().toUpperCase()||undefined;onSave({id:recipe?.id||uid(),name:name.trim(),holiday,url,sourceUrl:sourceUrl||undefined,tags,ingredientRefs:refs,instructions:inst,imageUrl:imageUrl||undefined,servings:recipe?.servings,...(tMin?{time:tMin}:{}),...(nl?{noaLabel:nl}:{noaLabel:undefined})},newIngs);}
+  function save(){if(!name.trim())return;const inst=instructions.split('\n').map(s=>s.trim()).filter(Boolean);const tMin=parseInt(time)||null;const nl=noaLabel.trim().toUpperCase()||undefined;if(nl){const dup=(allRecipes||[]).some(r=>r.id!==(recipe?.id)&&r.noaLabel&&r.noaLabel.toUpperCase()===nl);if(dup){setNoaLabelError(true);return;}}onSave({id:recipe?.id||uid(),name:name.trim(),holiday,url,sourceUrl:sourceUrl||undefined,tags,ingredientRefs:refs,instructions:inst,imageUrl:imageUrl||undefined,servings:recipe?.servings,...(tMin?{time:tMin}:{}),...(nl?{noaLabel:nl}:{noaLabel:undefined})},newIngs);}
   return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget&&!editing)onClose();}}>
     <div className="modal">
       {imageUrl&&<img src={proxyImg(imageUrl)}data-orig={imageUrl}alt=""style={{width:'100%',height:160,objectFit:'cover',borderRadius:'var(--r) var(--r) 0 0',display:'block'}}onError={imgOnError}/>}
@@ -2264,13 +2264,14 @@ function ShoppingTab({state,dispatch,showToast,phase}){
   // Aisle classification
   function getAisle(name){
     const n=(name||'').toLowerCase();
-    if(/\b(apple|banana|berry|berries|carrot|celery|cucumber|garlic|ginger|grape|kale|lemon|lettuce|lime|mango|mushroom|onion|orange|peach|pear|pepper|potato|pumpkin|spinach|squash|strawberr|sweet potato|tomato|zucchini|herb|basil|cilantro|parsley|thyme|rosemary|mint|dill|chive|scallion|shallot|broccoli|cauliflower|asparagus|arugula|avocado|beet|cabbage|corn|eggplant|leek|okra|pea|radish|turnip|artichoke|bok choy|brussel|fennel|kohlrabi|watercress|endive|escarole|radicchio|rhubarb)/.test(n))return'🥦 Produce';
-    if(/\b(milk|cream|butter|cheese|yogurt|egg|cheddar|mozzarella|parmesan|ricotta|feta|brie|gouda|kefir|sour cream|cream cheese|half.and.half|whipping|cottage|ghee)/.test(n))return'🥛 Dairy & Eggs';
+    if(/\b(fire.roasted|canned tomato|diced tomato|crushed tomato|stewed tomato)/.test(n))return'🌾 Grains, Pasta, Legumes & Canned Goods';
+    if(/\b(apple|banana|blueberr|berry|berries|carrot|celery|cucumber|garlic|ginger|grape|kale|lemon|lettuce|lime|mango|mushroom|onion|orange|peach|pear|pepper|potato|pumpkin|spinach|squash|strawberr|sweet potato|tomato|zucchini|herb|basil|cilantro|parsley|thyme|rosemary|mint|dill|chive|scallion|shallot|broccoli|cauliflower|asparagus|arugula|avocado|beet|cabbage|corn|eggplant|leek|okra|pea|radish|turnip|artichoke|bok choy|brussel|fennel|kohlrabi|watercress|endive|escarole|radicchio|rhubarb)/.test(n))return'🥦 Produce';
+    if(/\b(milk|cream|butter|cheese|yogurt|egg|cheddar|mozzarella|parmesan|ricotta|feta|brie|gouda|kefir|sour cream|cream cheese|half.and.half|whipping|cottage|ghee|burrata)/.test(n))return'🥛 Dairy & Eggs';
     if(/\b(chicken|beef|pork|turkey|lamb|salmon|tuna|shrimp|cod|tilapia|sausage|bacon|ham|steak|ground|deli|prosciutto|pancetta|salami|pepperoni|anchovy|crab|lobster|scallop|halibut|trout|sardine|duck|veal|bison|venison)/.test(n))return'🥩 Meat & Seafood';
     if(/\b(frozen|ice cream|popsicle|edamame)/.test(n))return'❄️ Frozen';
     if(/\b(bread|bagel|bun|roll|pita|tortilla|wrap|english muffin|croissant|challah|biscuit|sourdough|rye|pumpernickel|naan|focaccia|ciabatta|brioche)/.test(n))return'🍞 Bakery & Bread';
     if(/\b(almond|cashew|walnut|pecan|pistachio|hazelnut|macadamia|peanut|pine nut|sunflower seed|pumpkin seed|sesame seed|chia|flax|hemp|poppy seed|raisin|cranberr|date|fig|apricot|prune|currant|goji|coconut flake)/.test(n))return'🥜 Nuts, Seeds & Dried Fruit';
-    if(/\b(pasta|noodle|rice|quinoa|oat|barley|farro|bulgur|couscous|polenta|grits|cereal|granola|flour|bread crumb|panko|cornmeal|cornstarch|tapioca|semolina|spelt|buckwheat|millet|lentil|chickpea|black bean|kidney bean|cannellini|pinto bean|white bean|navy bean)/.test(n))return'🌾 Grains, Pasta & Legumes';
+    if(/\b(pasta|noodle|rice|quinoa|oat|barley|farro|bulgur|couscous|polenta|grits|cereal|granola|flour|bread crumb|panko|cornmeal|cornstarch|tapioca|semolina|spelt|buckwheat|millet|lentil|chickpea|black bean|kidney bean|cannellini|pinto bean|white bean|navy bean|canned bean|fire.roasted)/.test(n))return'🌾 Grains, Pasta, Legumes & Canned Goods';
     if(/\b(oil|olive oil|canola|vegetable oil|coconut oil|sesame oil|avocado oil|vinegar|soy sauce|tamari|hot sauce|worcestershire|fish sauce|oyster sauce|hoisin|sriracha|ketchup|mustard|mayo|mayonnaise|relish|salsa|barbecue|teriyaki|tahini|miso|pesto|tomato paste|tomato sauce|marinara|broth|stock|bouillon|worcester)/.test(n))return'🫙 Condiments & Sauces';
     if(/\b(sugar|brown sugar|honey|maple syrup|agave|molasses|powdered sugar|confectioner|vanilla|chocolate|cocoa|cinnamon|nutmeg|clove|cardamom|allspice|ginger powder|turmeric|cumin|coriander|paprika|cayenne|chili powder|curry|oregano|bay leaf|pepper|salt|baking soda|baking powder|yeast|cream of tartar|gelatin|agar|extract|food color|sprinkle|caramel|butterscotch|chip|m&m|marshmallow)/.test(n))return'🧂 Baking & Spices';
     if(/\b(water|juice|soda|coffee|tea|wine|beer|spirits|kombucha|almond milk|oat milk|soy milk|coconut milk|coconut water)/.test(n))return'🥤 Beverages';
@@ -2278,7 +2279,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
     return'📦 Other';
   }
   function getAisleOrder(aisle){
-    const order=['🥦 Produce','🥛 Dairy & Eggs','🥩 Meat & Seafood','❄️ Frozen','🍞 Bakery & Bread','🥜 Nuts, Seeds & Dried Fruit','🌾 Grains, Pasta & Legumes','🫙 Condiments & Sauces','🧂 Baking & Spices','🥤 Beverages','🧴 Household & Personal','📦 Other'];
+    const order=['🥦 Produce','🥛 Dairy & Eggs','🥩 Meat & Seafood','❄️ Frozen','🍞 Bakery & Bread','🥜 Nuts, Seeds & Dried Fruit','🌾 Grains, Pasta, Legumes & Canned Goods','🫙 Condiments & Sauces','🧂 Baking & Spices','🥤 Beverages','🧴 Household & Personal','📦 Other'];
     const i=order.indexOf(aisle);return i>=0?i:99;
   }
   // Sort within a store group
@@ -2733,7 +2734,7 @@ function NoaTab({state,dispatch,showToast,isNanny,onAddToHuckle}){
       ings.includes(q);
   }),[noaRecipes,catFilter,q,state.ingredients]);
 
-  return<div className="content">
+  return<div className="content" style={{paddingBottom:100}}>
     <div className="sh">
       <div className="sh-title"style={{color:'var(--noa)'}}>🍼 Noa's Food</div>
       {!isNanny&&<span style={{fontSize:12,color:'var(--muted)'}}>Nanny sees this tab only</span>}
@@ -2795,6 +2796,7 @@ function NoaTab({state,dispatch,showToast,isNanny,onAddToHuckle}){
                   🫐
                 </button>}
                 {!isNanny&&<button className="btn btn-icon"style={{padding:'5px 8px'}}onClick={()=>setEditing(r)}title="Edit recipe"><span style={{display:'inline-block',transform:'scaleX(-1)',fontSize:16,lineHeight:1}}>✏️</span></button>}
+                {!isNanny&&<button onClick={()=>dispatch({type:'NOA_ROSTER_RM',recId:r.id})} title="Remove from Noa's cookbook" style={{background:'none',border:'1px solid var(--border)',borderRadius:8,width:32,height:32,fontSize:14,cursor:'pointer',color:'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>✕</button>}
               </div>
             </div>
             {ings.length>0&&<div style={{fontSize:13,color:'var(--text)',marginTop:6,lineHeight:1.5}}>
@@ -2929,7 +2931,7 @@ function RecipesTab({state,dispatch,showToast,onAddToHuckle}){
                   placeholder="Label (e.g. RP)"
                   defaultValue={r.noaLabel||''}
                   key={`lbl-${r.id}`}
-                  onBlur={e=>{const v=e.target.value.trim().toUpperCase();if(v!==(r.noaLabel||''))dispatch({type:'SAVE_REC',rec:{...r,noaLabel:v},newIngs:[]});}}
+                  onBlur={e=>{const v=e.target.value.trim().toUpperCase();if(v===(r.noaLabel||''))return;const dup=v&&(state.recipes||[]).some(x=>x.id!==r.id&&x.noaLabel&&x.noaLabel.toUpperCase()===v);if(dup){e.target.style.borderColor='var(--red)';e.target.title='Label already in use';return;}e.target.style.borderColor='';e.target.title='';dispatch({type:'SAVE_REC',rec:{...r,noaLabel:v||undefined},newIngs:[]});}}
                   onKeyDown={e=>{if(e.key==='Enter')e.target.blur();}}
                 />
               </div>}
@@ -3137,7 +3139,7 @@ function HolidaysTab({state,dispatch,showToast}){
                     placeholder="Label"
                     defaultValue={rec.noaLabel||''}
                     key={`cb-lbl-${rec.id}`}
-                    onBlur={e=>{const v=e.target.value.trim().toUpperCase();if(v!==(rec.noaLabel||''))dispatch({type:'SAVE_REC',rec:{...rec,noaLabel:v},newIngs:[]});}}
+                    onBlur={e=>{const v=e.target.value.trim().toUpperCase();if(v===(rec.noaLabel||''))return;const dup=v&&(state.recipes||[]).some(x=>x.id!==rec.id&&x.noaLabel&&x.noaLabel.toUpperCase()===v);if(dup){e.target.style.borderColor='var(--red)';e.target.title='Label already in use';return;}e.target.style.borderColor='';e.target.title='';dispatch({type:'SAVE_REC',rec:{...rec,noaLabel:v||undefined},newIngs:[]});}}
                     onKeyDown={e=>{if(e.key==='Enter')e.target.blur();}}
                   />
                 </div>}
