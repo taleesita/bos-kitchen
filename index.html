@@ -2156,7 +2156,7 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
 
 // ── Shopping Tab ──────────────────────────────────────────────────────────────
 // Render a single shopping item row
-function ShopRow({item,checked,onCheck,showStore,showRecipe,onSaveIng}){
+function ShopRow({item,checked,onCheck,showStore,showRecipe,showQty,onSaveIng}){
 const[rowEditing,setRowEditing]=useState(false);
 const[rowEditData,setRowEditData]=useState(null);
 const qtyRecipes=new Set(item.qtys.map(q=>q.recipe));
@@ -2331,7 +2331,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
       <div className="card"style={{padding:0,overflow:'hidden'}}>
         {reviewItems.map(item=>{
           const isKnownIng=state.ingredients.find(i=>i.id===item.id);
-          return<ShopRow key={item.id}showRecipe={showRecipe}item={item}
+          return<ShopRow key={item.id}showRecipe={showRecipe}showQty={showQty}item={item}
             checked={needed.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_NEED',id:item.id})}showStore={true}
             onSaveIng={isKnownIng?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/>;
         })}
@@ -2368,7 +2368,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
                 if(a!==lastRecipe){lastRecipe=a;divider=<div style={{fontSize:10,fontWeight:700,color:'var(--sage-dark)',padding:'5px 13px 2px',background:'var(--cream)',borderBottom:'1px solid var(--border)'}}>{a}</div>;}
               }
               const isKnownIng2=state.ingredients.find(i=>i.id===item.id);
-              return<React.Fragment key={item.id}>{divider}<ShopRow item={item}checked={pickedUp.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_PICK',id:item.id})}showStore={false}
+              return<React.Fragment key={item.id}>{divider}<ShopRow item={item}showQty={showQty}checked={pickedUp.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_PICK',id:item.id})}showStore={false}
                 onSaveIng={isKnownIng2?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/></React.Fragment>;
             })}
           </div>
