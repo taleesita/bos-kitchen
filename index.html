@@ -3953,6 +3953,19 @@ function App({user,onSignOut}){
     }).catch(e=>{setSyncStatus('error');if(!silent)showToast('Could not load Firebase SDK — check internet connection.');});
   }
 
+  // Flush pending Firebase write immediately when tab is hidden or closed
+  useEffect(()=>{
+    function flushOnHide(){
+      if(document.visibilityState==='hidden'&&saveTimer.current&&fbDbRef.current&&fbInitialized.current){
+        clearTimeout(saveTimer.current);
+        saveTimer.current=null;
+        fbWrite(fbDbRef.current,stateRef.current).catch(e=>console.error('[fbWrite flush]',e.message));
+      }
+    }
+    document.addEventListener('visibilitychange',flushOnHide);
+    return()=>document.removeEventListener('visibilitychange',flushOnHide);
+  },[]);
+
   // Auto-connect Firebase on load — delay so page/CDN are ready
   useEffect(()=>{
     if(fbDbUrl&&state){
