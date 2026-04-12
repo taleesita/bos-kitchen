@@ -2156,7 +2156,7 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
 
 // ── Shopping Tab ──────────────────────────────────────────────────────────────
 // Render a single shopping item row
-function ShopRow({item,checked,onCheck,showStore,showRecipe,showQty,onSaveIng}){
+function ShopRow({item,checked,onCheck,showStore,showRecipe,showQty,onSaveIng,onViewRecipe}){
 const[rowEditing,setRowEditing]=useState(false);
 const[rowEditData,setRowEditData]=useState(null);
 const qtyRecipes=new Set(item.qtys.map(q=>q.recipe));
@@ -2180,11 +2180,11 @@ return<div className="shop-item">
   <div style={{flex:1}}>
     <div className="sname">{item.name}</div>
     {showRecipe&&(item.qtys.length>0||plainSources.length>0)&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:3}}>
-      {item.qtys.map((q,i)=><div key={i}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,display:'flex',flexDirection:'column',maxWidth:160}}>
+      {item.qtys.map((q,i)=><div key={i}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,display:'flex',flexDirection:'column',maxWidth:160,cursor:onViewRecipe?'pointer':'default'}} onClick={onViewRecipe?()=>onViewRecipe(q.recipe):undefined} title={onViewRecipe?'View recipe':undefined}>
         <span style={{color:'var(--sage-dark)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q.recipe}</span>
         {showQty&&q.qty&&<span style={{color:'var(--text)',fontWeight:400}}>{q.qty}</span>}
       </div>)}
-      {plainSources.map(s=><div key={s}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,maxWidth:160}}>
+      {plainSources.map(s=><div key={s}style={{background:'var(--sage-light)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 7px',fontSize:10,lineHeight:1.35,maxWidth:160,cursor:onViewRecipe?'pointer':'default'}} onClick={onViewRecipe?()=>onViewRecipe(s):undefined} title={onViewRecipe?'View recipe':undefined}>
         <span style={{color:'var(--sage-dark)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}}>{s}</span>
       </div>)}
     </div>}
@@ -2198,6 +2198,12 @@ function ShoppingTab({state,dispatch,showToast,phase}){
   const[sortBy,setSortBy]=useState('alpha'); // 'alpha' | 'recipe' | 'aisle'
   const[showRecipe,setShowRecipe]=useState(false);
   const[showQty,setShowQty]=useState(false);
+  const[viewing,setViewing]=useState(null);
+  const[editing,setEditing]=useState(null);
+  function onViewRecipe(recipeName){
+    const r=(state.recipes||[]).find(function(x){return x.name===recipeName||x.id===recipeName;});
+    if(r)setViewing(r);
+  }
 
   const weekIngs=useMemo(()=>{
     const allIds=new Set();const sources={};const qtys={};
@@ -2334,6 +2340,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
           const isKnownIng=state.ingredients.find(i=>i.id===item.id);
           return<ShopRow key={item.id}showRecipe={showRecipe}showQty={showQty}item={item}
             checked={needed.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_NEED',id:item.id})}showStore={true}
+            onViewRecipe={onViewRecipe}
             onSaveIng={isKnownIng?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/>;
         })}
       </div>
@@ -2369,7 +2376,8 @@ function ShoppingTab({state,dispatch,showToast,phase}){
                 if(a!==lastRecipe){lastRecipe=a;divider=<div style={{fontSize:10,fontWeight:700,color:'var(--sage-dark)',padding:'5px 13px 2px',background:'var(--cream)',borderBottom:'1px solid var(--border)'}}>{a}</div>;}
               }
               const isKnownIng2=state.ingredients.find(i=>i.id===item.id);
-              return<React.Fragment key={item.id}>{divider}<ShopRow item={item}showQty={showQty}checked={pickedUp.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_PICK',id:item.id})}showStore={false}
+              return<React.Fragment key={item.id}>{divider}<ShopRow item={item}showQty={showQty}showRecipe={showRecipe}checked={pickedUp.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_PICK',id:item.id})}showStore={false}
+                onViewRecipe={onViewRecipe}
                 onSaveIng={isKnownIng2?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/></React.Fragment>;
             })}
           </div>
@@ -2388,6 +2396,14 @@ function ShoppingTab({state,dispatch,showToast,phase}){
         </div>
       </div>}
     </>}
+  {viewing&&<RecipeViewModal recipe={viewing}ingredients={state.ingredients}
+    onEdit={()=>{setEditing(viewing);setViewing(null);}}
+    onClose={()=>setViewing(null)}
+    dispatch={dispatch}showToast={showToast}/>}
+  {editing&&<RecipeModal recipe={editing}ingredients={state.ingredients}allRecipes={state.recipes}
+    onSave={(rec,ni)=>{dispatch({type:'SAVE_REC',rec,newIngs:ni});setEditing(null);showToast(rec.name+' saved!');}}
+    onDelete={id=>{dispatch({type:'DEL_REC',id});setEditing(null);showToast('Deleted');}}
+    onClose={()=>setEditing(null)}/>}
   </div>;
 }
 
