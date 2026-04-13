@@ -3939,6 +3939,8 @@ function App({user,onSignOut}){
             // even if the Firebase write timer hadn't fired before the page refresh.
             let localOvData={recOv:[],ingOv:[]};
             try{const _raw=localStorage.getItem('kitchen_overrides');if(_raw)localOvData=JSON.parse(_raw);}catch(e){}
+            console.log('[fbListen] localOvData.recOv=',JSON.stringify(localOvData.recOv));
+            console.log('[fbListen] ud.recOv=',JSON.stringify(ud.recOv));
             function mergeOv(fbOv,localOv){
               const merged=[...(fbOv||[])];
               (localOv||[]).forEach(function(lo){
