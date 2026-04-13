@@ -3932,10 +3932,23 @@ function App({user,onSignOut}){
             });
             const safeMp={weekStart:mp.weekStart||initMp.weekStart,days:normDays,
               misc:Array.isArray(mp.misc)?mp.misc:[],noa:Array.isArray(mp.noa)?mp.noa:[]};
+            // Merge Firebase overrides with any local overrides not yet written to Firebase
+            // (local wins for same ID — prevents edits from reverting on fast refresh)
+            const localOvData=stateRef.current?getUserData(stateRef.current):{recOv:[],ingOv:[]};
+            function mergeOv(fbOv,localOv){
+              const merged=[...(fbOv||[])];
+              (localOv||[]).forEach(function(lo){
+                const idx=merged.findIndex(function(x){return x.id===lo.id;});
+                if(idx>=0){merged[idx]=lo;}else{merged.push(lo);}
+              });
+              return merged;
+            }
+            const effectiveRecOv=mergeOv(ud.recOv,localOvData.recOv);
+            const effectiveIngOv=mergeOv(ud.ingOv,localOvData.ingOv);
             const seedIngs=(window.SEED.ingredients||[]).map(i=>{
-              const ov=(ud.ingOv||[]).find(o=>o.id===i.id);return ov?{...i,name:ov.name||i.name,store:ov.store}:i;
+              const ov=effectiveIngOv.find(o=>o.id===i.id);return ov?{...i,name:ov.name||i.name,store:ov.store}:i;
             });
-            const seedRecs=(window.SEED.recipes||[]).map(r=>{const ov=(ud.recOv||[]).find(o=>o.id===r.id);return ov?{...r,...ov}:r;});
+            const seedRecs=(window.SEED.recipes||[]).map(r=>{const ov=effectiveRecOv.find(o=>o.id===r.id);return ov?{...r,...ov}:r;});
             function mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
             const safeShopping=ud.shopping||{needed:[],pickedUp:[]};
             const newState={
