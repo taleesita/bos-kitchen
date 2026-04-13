@@ -495,7 +495,12 @@ function loadFirebaseSDK(){
     document.head.appendChild(s);
   });
 }
-function fbWrite(db,state){return db.ref('kitchen').set({...getUserData(state),_writer:SESSION_ID});}
+function stripUndef(obj){
+  if(Array.isArray(obj))return obj.map(stripUndef);
+  if(obj&&typeof obj==='object'){const o={};Object.keys(obj).forEach(k=>{if(obj[k]!==undefined)o[k]=stripUndef(obj[k]);});return o;}
+  return obj;
+}
+function fbWrite(db,state){return db.ref('kitchen').set(stripUndef({...getUserData(state),_writer:SESSION_ID}));}
 function fbListen(db,cb){fbKitchenRef=db.ref('kitchen');fbKitchenRef.on('value',snap=>{const d=snap.val();if(!d||d._writer!==SESSION_ID)cb(d);});}
 function fbStop(){try{if(fbKitchenRef)fbKitchenRef.off();}catch(e){}try{if(fbConnectedRef)fbConnectedRef.off();}catch(e){}fbKitchenRef=null;fbConnectedRef=null;}
 
