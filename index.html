@@ -3867,6 +3867,8 @@ function App({user,onSignOut}){
   useEffect(()=>{
     if(!state)return;
     stateRef.current=state; // keep ref in sync for async callbacks
+    // Always persist overrides immediately — read synchronously by Firebase listener to survive fast refreshes
+    try{const _ov=getUserData(state);localStorage.setItem('kitchen_overrides',JSON.stringify({recOv:_ov.recOv,ingOv:_ov.ingOv}));}catch(e){}
     if(isFirst.current){isFirst.current=false;return;}
     try{localStorage.setItem('kitchen_local',JSON.stringify(state));localStorage.setItem('kitchen_data_ver',String(DATA_VER));}catch(e){}
     // Firebase-triggered update: save to localStorage but KEEP any pending local write timer.
@@ -3932,9 +3934,11 @@ function App({user,onSignOut}){
             });
             const safeMp={weekStart:mp.weekStart||initMp.weekStart,days:normDays,
               misc:Array.isArray(mp.misc)?mp.misc:[],noa:Array.isArray(mp.noa)?mp.noa:[]};
-            // Merge Firebase overrides with any local overrides not yet written to Firebase
-            // (local wins for same ID — prevents edits from reverting on fast refresh)
-            const localOvData=stateRef.current?getUserData(stateRef.current):{recOv:[],ingOv:[]};
+            // Merge Firebase overrides with local overrides saved to dedicated localStorage key.
+            // Reading localStorage is synchronous so this always has the latest edits,
+            // even if the Firebase write timer hadn't fired before the page refresh.
+            let localOvData={recOv:[],ingOv:[]};
+            try{const _raw=localStorage.getItem('kitchen_overrides');if(_raw)localOvData=JSON.parse(_raw);}catch(e){}
             function mergeOv(fbOv,localOv){
               const merged=[...(fbOv||[])];
               (localOv||[]).forEach(function(lo){
