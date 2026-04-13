@@ -3844,9 +3844,14 @@ function App({user,onSignOut}){
         function _mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
         const customRecs=(parsed.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id));
         const customIngs=(parsed.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id));
-        const _seedRecs=(window.SEED.recipes||[]).map(r=>{const ov=(parsed.recOv||[]).find(o=>o.id===r.id);return ov?{...r,...ov}:r;});
+        // Preserve user-edited seed recipes (use parsed version if present, else add new seed item)
+        const parsedRecById=new Map((parsed.recipes||[]).map(r=>[r.id,r]));
+        const _seedRecs=(window.SEED.recipes||[]).map(r=>parsedRecById.get(r.id)||r);
+        // Preserve user-edited seed ingredients (store changes etc.)
+        const parsedIngById=new Map((parsed.ingredients||[]).map(i=>[i.id,i]));
+        const _seedIngs=(window.SEED.ingredients||[]).map(i=>parsedIngById.get(i.id)||i);
         parsed.recipes=[..._seedRecs,..._mergeById([],customRecs)];
-        parsed.ingredients=[...(window.SEED.ingredients||[]),..._mergeById([],customIngs)];
+        parsed.ingredients=[..._seedIngs,..._mergeById([],customIngs)];
         // Always include NOA_SEED_ROSTER so Noa tab is pre-populated
         parsed.noaRoster=[...new Set([...NOA_SEED_ROSTER,...(Array.isArray(parsed.noaRoster)?parsed.noaRoster:[])])];
         dispatch({type:'INIT',state:parsed});return;
