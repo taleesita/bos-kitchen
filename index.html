@@ -2738,6 +2738,7 @@ function NoaTab({state,dispatch,showToast,isNanny,onAddToHuckle}){
   const[catFilter,setCatFilter]=useState('');
   const[viewing,setViewing]=useState(null);
   const[editing,setEditing]=useState(null);
+  const[huckFlash,setHuckFlash]=useState(new Set());
 
   const roster=state.noaRoster||[];
   const rosterSet=new Set(roster);
@@ -2827,12 +2828,12 @@ function NoaTab({state,dispatch,showToast,isNanny,onAddToHuckle}){
                 {r.noaLabel&&<div style={{background:'var(--noa)',color:'white',fontWeight:800,fontSize:18,borderRadius:8,minWidth:40,height:40,display:'flex',alignItems:'center',justifyContent:'center',letterSpacing:'0.5px',padding:'0 8px'}}>
                   {r.noaLabel}
                 </div>}
-                {onAddToHuckle&&ings.length>0&&<button
-                  onClick={()=>onAddToHuckle(r.id)}
-                  title="Add to Huckleberry logger"
-                  style={{background:'none',border:'1.5px solid #ce93d8',borderRadius:8,width:40,height:40,fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,lineHeight:1}}>
-                  🫐
-                </button>}
+                {onAddToHuckle&&ings.length>0&&(()=>{const flashed=huckFlash.has(r.id);return<button
+                  onClick={()=>{onAddToHuckle(r.id);setHuckFlash(s=>{const n=new Set(s);n.add(r.id);return n;});setTimeout(()=>setHuckFlash(s=>{const n=new Set(s);n.delete(r.id);return n;}),2000);}}
+                  title={flashed?"Added to Huckleberry!":"Add to Huckleberry logger"}
+                  style={{background:flashed?'#ce93d8':'none',border:'1.5px solid #ce93d8',borderRadius:8,width:40,height:40,fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,lineHeight:1,transition:'background 0.2s'}}>
+                  {flashed?'✓':'🫐'}
+                </button>;})()}
                 {!isNanny&&<button className="btn btn-icon"style={{padding:'5px 8px'}}onClick={()=>setEditing(r)}title="Edit recipe"><span style={{display:'inline-block',transform:'scaleX(-1)',fontSize:16,lineHeight:1}}>✏️</span></button>}
                 {!isNanny&&<button onClick={()=>dispatch({type:'NOA_ROSTER_RM',recId:r.id})} title="Remove from Noa's cookbook" style={{background:'none',border:'1px solid var(--border)',borderRadius:8,width:32,height:32,fontSize:14,cursor:'pointer',color:'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>✕</button>}
               </div>
