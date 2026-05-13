@@ -8,6 +8,14 @@
 <meta name="theme-color" content="#2d4a2d">
 <title>Bo's Kitchen</title>
 <script>
+// ── Service Worker registration ──────────────────────────────────────────────
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('./sw.js').catch(function(e){console.warn('SW reg failed:',e);});
+  });
+}
+</script>
+<script>
 (function(){try{
   var img=new Image();
   img.onload=function(){
@@ -3828,6 +3836,14 @@ function App({user,onSignOut}){
   const[showSettings,setShowSettings]=useState(false);
   const[fbDbUrl,setFbDbUrl]=useState(()=>localStorage.getItem('kitchen_fb_url')||'https://bo-s-kitchen-default-rtdb.firebaseio.com/');
   const[syncStatus,setSyncStatus]=useState('off'); // off | connecting | live | error
+  const[isOffline,setIsOffline]=useState(!navigator.onLine);
+  useEffect(()=>{
+    function goOffline(){setIsOffline(true);}
+    function goOnline(){setIsOffline(false);}
+    window.addEventListener('offline',goOffline);
+    window.addEventListener('online',goOnline);
+    return()=>{window.removeEventListener('offline',goOffline);window.removeEventListener('online',goOnline);};
+  },[]);
   // Huckleberry logger state
   const[huckQueue,setHuckQueue]=useState([]); // array of recipe IDs in current session
   const[huckCopied,setHuckCopied]=useState([]); // array of ingredient IDs already copied
@@ -4029,6 +4045,9 @@ function App({user,onSignOut}){
   const dotClass=syncStatus==='live'?'live':syncStatus==='connecting'?'warn':syncStatus==='error'?'err':'off';
 
   return<div id="root">
+    {isOffline&&<div style={{background:'#92400e',color:'#fef3c7',textAlign:'center',fontSize:13,fontWeight:600,padding:'6px 12px',letterSpacing:'0.2px',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+      <span>📵</span><span>Offline — viewing saved data. Changes will sync when back online.</span>
+    </div>}
     <div className="hdr">
       <div className="hdr-title">{isNanny?'🍼 Noa\'s Food':'🌮 Bo\'s Kitchen'}</div>
       <div style={{display:'flex',alignItems:'center',gap:6}}>
