@@ -2670,7 +2670,11 @@ function TimeFilterSheet({value,onChange,onClose}){
 }
 
 // ── Cookbook filter bottom sheet (mobile) ─────────────────────────────────────
-function CookbookFilterSheet({options,value,onChange,onClose}){
+function CookbookFilterSheet({options,selected,recipes,onToggle,onClose}){
+  const matchCount=useMemo(()=>{
+    if(selected.size===0)return recipes.length;
+    return recipes.filter(r=>selected.has(r.holiday)||(r.tags||[]).some(t=>selected.has(t))).length;
+  },[recipes,selected]);
   return<div className="sheet-bg"onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
     <div className="sheet-panel">
       <div className="sheet-hdr">
@@ -2680,14 +2684,19 @@ function CookbookFilterSheet({options,value,onChange,onClose}){
         </div>
       </div>
       <div className="sheet-body">
-        <div className="ing-pick-item"onClick={()=>onChange('')}>
-          <div className={`ing-pick-check${!value?' on':''}`}>{!value?'✓':''}</div>
+        <div className="ing-pick-item"onClick={()=>onToggle(null)}>
+          <div className={`ing-pick-check${selected.size===0?' on':''}`}>{selected.size===0?'✓':''}</div>
           <span>All Recipes</span>
         </div>
-        {options.map(h=><div key={h}className="ing-pick-item"onClick={()=>onChange(h)}>
-          <div className={`ing-pick-check${value===h?' on':''}`}>{value===h?'✓':''}</div>
+        {options.map(h=><div key={h}className="ing-pick-item"onClick={()=>onToggle(h)}>
+          <div className={`ing-pick-check${selected.has(h)?' on':''}`}>{selected.has(h)?'✓':''}</div>
           <span>{COOKBOOK_EMOJIS[h]?COOKBOOK_EMOJIS[h]+' ':''}{h}</span>
         </div>)}
+      </div>
+      <div style={{padding:'10px 16px 16px'}}>
+        <button className="btn btn-primary"style={{width:'100%',justifyContent:'center'}}onClick={onClose}>
+          {selected.size>0?`Show ${matchCount} recipe${matchCount!==1?'s':''}…`:'Done'}
+        </button>
       </div>
     </div>
   </div>;
@@ -2868,7 +2877,7 @@ function NoaTab({state,dispatch,showToast,isNanny,onAddToHuckle}){
 
 function RecipesTab({state,dispatch,showToast,onAddToHuckle}){
   const[search,setSearch]=useState('');
-  const[hFilter,setHFilter]=useState('');
+  const[hFilters,setHFilters]=useState(()=>new Set());
   const[ingFilters,setIngFilters]=useState(()=>new Set());
   const[timeFilter,setTimeFilter]=useState(null); // null | 15 | 30 | 60
   const[showIngSheet,setShowIngSheet]=useState(false);
@@ -2889,14 +2898,18 @@ function RecipesTab({state,dispatch,showToast,onAddToHuckle}){
   const[ingEditing,setIngEditing]=useState(null); // lifted from ManageIngsModal
   const isMobile=useIsMobile();
   const allHols=useMemo(()=>[...new Set(state.recipes.flatMap(r=>[r.holiday,...(r.tags||[])]).filter(Boolean))].sort(),[state.recipes]);
+  function toggleCookbook(h){
+    if(h===null){setHFilters(new Set());return;}
+    setHFilters(s=>{const n=new Set(s);n.has(h)?n.delete(h):n.add(h);return n;});
+  }
   const filtered=useMemo(()=>{
     let rs=state.recipes;
-    if(hFilter)rs=rs.filter(r=>r.holiday===hFilter||(r.tags||[]).includes(hFilter));
+    if(hFilters.size>0)rs=rs.filter(r=>hFilters.has(r.holiday)||(r.tags||[]).some(t=>hFilters.has(t)));
     if(search.trim()){rs=rs.filter(r=>fuzzyMatch(r.name,search));}
     if(ingFilters.size>0)rs=rs.filter(r=>(r.ingredientRefs||[]).some(ref=>ingFilters.has(ref.id)));
     if(timeFilter)rs=rs.filter(r=>r.time&&r.time<=timeFilter);
     return[...rs].sort((a,b)=>a.name.localeCompare(b.name));
-  },[state.recipes,search,hFilter,ingFilters,timeFilter]);
+  },[state.recipes,search,hFilters,ingFilters,timeFilter]);
   function toggleIng(id,clearAll){
     if(clearAll){setIngFilters(new Set());return;}
     setIngFilters(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n;});
@@ -2912,21 +2925,18 @@ function RecipesTab({state,dispatch,showToast,onAddToHuckle}){
     </div>
     <div style={{display:'flex',gap:7,marginBottom:8,flexWrap:'wrap'}}>
       <input className="inp"style={{flex:1,minWidth:140}}value={search}onChange={e=>setSearch(e.target.value)}placeholder="Search…"/>
-      {!isMobile&&<select className="inp"style={{width:'auto'}}value={hFilter}onChange={e=>setHFilter(e.target.value)}>
-        <option value="">All</option>{allHols.map(h=><option key={h}value={h}>{h}</option>)}
-      </select>}
     </div>
     <div className="filt-bar">
-      {isMobile&&<button className={`filt-chip${hFilter?' fc-on':''}`}onClick={()=>setShowCookbookSheet(true)}>
-        📚 {hFilter||'Cookbook'}{hFilter&&<span onClick={e=>{e.stopPropagation();setHFilter('');}}>  ✕</span>}
-      </button>}
+      <button className={`filt-chip${hFilters.size>0?' fc-on':''}`}onClick={()=>setShowCookbookSheet(true)}>
+        📚 {hFilters.size>0?`Cookbook (${hFilters.size})`:'Cookbook'}{hFilters.size>0&&<span onClick={e=>{e.stopPropagation();setHFilters(new Set());}}>  ✕</span>}
+      </button>
       <button className={`filt-chip${ingFilters.size>0?' fc-on':''}`}onClick={()=>setShowIngSheet(true)}>
         🥕 Ingredients{ingFilters.size>0?` (${ingFilters.size})`:''}
       </button>
       <button className={`filt-chip${timeFilter?' fc-on':''}`}onClick={()=>setShowTimeSheet(true)}>
         ⏱ {timeFilter?`≤${timeFilter<60?timeFilter+'m':'1h'}`:'Time'}
       </button>
-      {(ingFilters.size>0||timeFilter||(isMobile&&hFilter))&&<button className="filt-chip"style={{padding:'5px 9px',color:'var(--red)',borderColor:'var(--red)'}}onClick={()=>{setIngFilters(new Set());setTimeFilter(null);setHFilter('');}}>✕ Clear</button>}
+      {(hFilters.size>0||ingFilters.size>0||timeFilter)&&<button className="filt-chip"style={{padding:'5px 9px',color:'var(--red)',borderColor:'var(--red)'}}onClick={()=>{setHFilters(new Set());setIngFilters(new Set());setTimeFilter(null);}}>✕ Clear</button>}
     </div>
     {filtered.length===0&&<div className="empty"><div className="empty-icon">🍴</div>No recipes found{(ingFilters.size>0||timeFilter)&&<div style={{fontSize:12,marginTop:6}}>Try clearing some filters</div>}</div>}
     {/* Datalist for Noa category autocomplete — rendered once, used by all inline edits */}
@@ -3036,8 +3046,9 @@ function RecipesTab({state,dispatch,showToast,onAddToHuckle}){
       onClose={()=>setShowTimeSheet(false)}/>}
     {showCookbookSheet&&<CookbookFilterSheet
       options={allHols}
-      value={hFilter}
-      onChange={v=>{setHFilter(v);setShowCookbookSheet(false);}}
+      selected={hFilters}
+      recipes={state.recipes}
+      onToggle={toggleCookbook}
       onClose={()=>setShowCookbookSheet(false)}/>}
   </div>;
 }
