@@ -2971,7 +2971,7 @@ function RecipesTab({state,dispatch,showToast,onAddToHuckle}){
                   {r.url&&<a href={r.url}target="_blank"onClick={e=>e.stopPropagation()}style={{fontSize:12,color:'var(--muted)'}}>{sourceLinkLabel(r.url)} →</a>}
                 </div>
               </div>
-              {hFilter==='Nutbear'&&<div style={{display:'flex',gap:6,marginTop:6}}onClick={e=>e.stopPropagation()}>
+              {hFilters.has('Nutbear')&&<div style={{display:'flex',gap:6,marginTop:6}}onClick={e=>e.stopPropagation()}>
                 <input
                   className="inp"
                   style={{flex:2,fontSize:11,padding:'3px 7px',height:'auto'}}
