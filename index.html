@@ -1867,7 +1867,11 @@ function CookPlanOverlay({state,dispatch,onClose}){
   const[planId,setPlanId]=useState(null);
   const[creating,setCreating]=useState(false);
   const[newName,setNewName]=useState('');
-  const[newDays,setNewDays]=useState('');
+  const[startDate,setStartDate]=useState('');
+  const[endDate,setEndDate]=useState('');
+  const[labels,setLabels]=useState({}); // iso→custom label
+  const[extraCols,setExtraCols]=useState([]); // [{id,label}] non-date cols
+  const[extraInput,setExtraInput]=useState('');
   const plans=Object.values(state.cookPlans||{}).sort((a,b)=>b.createdAt-a.createdAt);
 
   if(planId){
@@ -1876,31 +1880,83 @@ function CookPlanOverlay({state,dispatch,onClose}){
     return<CookPlanEditor plan={plan} state={state} dispatch={dispatch} onBack={()=>setPlanId(null)}/>;
   }
 
+  // Build day list from date range
+  const dateDays=useMemo(()=>{
+    if(!startDate||!endDate)return[];
+    const out=[];
+    let d=new Date(startDate+'T00:00:00');
+    const end=new Date(endDate+'T00:00:00');
+    while(d<=end&&out.length<14){
+      const iso=d.toISOString().slice(0,10);
+      const auto=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+      out.push({iso,auto});
+      d.setDate(d.getDate()+1);
+    }
+    return out;
+  },[startDate,endDate]);
+
+  function resetCreating(){setCreating(false);setNewName('');setStartDate('');setEndDate('');setLabels({});setExtraCols([]);setExtraInput('');}
+
   function createPlan(){
     const name=newName.trim();
-    if(!name)return;
-    const days=newDays.split(',').map(d=>d.trim()).filter(Boolean);
-    if(!days.length)return;
+    if(!name||!dateDays.length)return;
+    const days=[
+      ...dateDays.map(d=>labels[d.iso]?.trim()||d.auto),
+      ...extraCols.map(c=>c.label)
+    ];
     const id=uid();
     dispatch({type:'COOK_PLAN_UPSERT',plan:{id,name,days,rows:[],createdAt:Date.now()}});
-    setCreating(false);setNewName('');setNewDays('');
+    resetCreating();
     setPlanId(id);
   }
 
+  function addExtraCol(){
+    const t=extraInput.trim();
+    if(!t)return;
+    setExtraCols(ec=>[...ec,{id:uid(),label:t}]);
+    setExtraInput('');
+  }
+
+  const canCreate=newName.trim()&&dateDays.length>0;
+
   return<div className="overlay"onClick={e=>e.target===e.currentTarget&&onClose()}>
-    <div className="modal"style={{maxWidth:480}}>
+    <div className="modal"style={{maxWidth:500}}>
       <div className="mhdr"><div className="mtitle">🎉 Holiday Plans</div><button className="mclose"onClick={onClose}>×</button></div>
       {plans.length===0&&!creating&&<div style={{color:'var(--muted)',textAlign:'center',padding:'20px 0',fontSize:14}}>No plans yet — create your first one!</div>}
       {plans.map(p=><div key={p.id}onClick={()=>setPlanId(p.id)}style={{display:'flex',flexDirection:'column',gap:2,padding:'12px 0',borderBottom:'1px solid var(--border)',cursor:'pointer'}}>
         <div style={{fontWeight:600}}>{p.name}</div>
-        <div style={{fontSize:12,color:'var(--muted)'}}>{(p.days||[]).join(' · ')} &middot; {(p.rows||[]).length} dish{(p.rows||[]).length!==1?'es':''}</div>
+        <div style={{fontSize:12,color:'var(--muted)'}}>{(p.days||[]).slice(0,4).join(' · ')}{(p.days||[]).length>4?` + ${(p.days||[]).length-4} more`:''} &middot; {(p.rows||[]).length} dish{(p.rows||[]).length!==1?'es':''}</div>
       </div>)}
-      {creating?<div style={{marginTop:16,display:'flex',flexDirection:'column',gap:10}}>
+      {creating?<div style={{marginTop:16,display:'flex',flexDirection:'column',gap:12}}>
         <div className="fg"><label className="lbl">Plan name</label><input className="inp"placeholder="e.g. Shavuot 2026"value={newName}onChange={e=>setNewName(e.target.value)}autoFocus/></div>
-        <div className="fg"><label className="lbl">Days (comma-separated)</label><input className="inp"placeholder="Friday, Saturday, Sunday (Erev Shavuot), 🥣 Plating, Monday Breakfast"value={newDays}onChange={e=>setNewDays(e.target.value)}/></div>
+        <div style={{display:'flex',gap:8}}>
+          <div className="fg"style={{flex:1}}><label className="lbl">Start date</label><input className="inp"type="date"value={startDate}onChange={e=>{setStartDate(e.target.value);if(!endDate)setEndDate(e.target.value);}}/></div>
+          <div className="fg"style={{flex:1}}><label className="lbl">End date</label><input className="inp"type="date"value={endDate}onChange={e=>setEndDate(e.target.value)}min={startDate}/></div>
+        </div>
+        {dateDays.length>0&&<div>
+          <div className="lbl"style={{marginBottom:6}}>Column labels <span style={{fontWeight:400,color:'var(--muted)'}}>(edit to rename)</span></div>
+          <div style={{display:'flex',flexDirection:'column',gap:4}}>
+            {dateDays.map(d=><div key={d.iso}style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:11,color:'var(--muted)',minWidth:68}}>{d.auto}</span>
+              <input className="inp"style={{flex:1,padding:'4px 8px',fontSize:13}}
+                placeholder={d.auto}
+                value={labels[d.iso]??''}
+                onChange={e=>setLabels(l=>({...l,[d.iso]:e.target.value}))}/>
+            </div>)}
+            {extraCols.map(c=><div key={c.id}style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:11,color:'var(--muted)',minWidth:68}}>extra</span>
+              <input className="inp"style={{flex:1,padding:'4px 8px',fontSize:13}}value={c.label}onChange={e=>setExtraCols(ec=>ec.map(x=>x.id===c.id?{...x,label:e.target.value}:x))}/>
+              <button onClick={()=>setExtraCols(ec=>ec.filter(x=>x.id!==c.id))}style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:16}}>×</button>
+            </div>)}
+            <div style={{display:'flex',gap:6,marginTop:2}}>
+              <input className="inp"style={{flex:1,padding:'4px 8px',fontSize:13}}placeholder="+ extra column (e.g. 🥣 Plating)"value={extraInput}onChange={e=>setExtraInput(e.target.value)}onKeyDown={e=>e.key==='Enter'&&addExtraCol()}/>
+              <button className="btn btn-secondary btn-sm"onClick={addExtraCol}>Add</button>
+            </div>
+          </div>
+        </div>}
         <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-          <button className="btn btn-secondary btn-sm"onClick={()=>setCreating(false)}>Cancel</button>
-          <button className="btn btn-primary btn-sm"onClick={createPlan} disabled={!newName.trim()||!newDays.trim()}>Create</button>
+          <button className="btn btn-secondary btn-sm"onClick={resetCreating}>Cancel</button>
+          <button className="btn btn-primary btn-sm"onClick={createPlan}disabled={!canCreate}>Create</button>
         </div>
       </div>:<button className="btn btn-primary"style={{width:'100%',marginTop:16}}onClick={()=>setCreating(true)}>+ New Plan</button>}
     </div>
