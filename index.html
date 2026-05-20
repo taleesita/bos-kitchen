@@ -1982,7 +1982,7 @@ function CookPlanOverlay({state,dispatch,onClose}){
 }
 
 function CookPlanEditor({plan,state,dispatch,onBack}){
-  const[sideRecipeId,setSideRecipeId]=useState(null);
+  const[sideRowId,setSideRowId]=useState(null);
   const[editingCell,setEditingCell]=useState(null);
   const[addingRow,setAddingRow]=useState(false);
   const[editingName,setEditingName]=useState(false);
@@ -1991,7 +1991,8 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
   const[dragRowId,setDragRowId]=useState(null);
   const[dragOverIdx,setDragOverIdx]=useState(null);
   const isMobile=useIsMobile();
-  const sideRecipe=sideRecipeId?state.recipes.find(r=>r.id===sideRecipeId):null;
+  const sideRow=sideRowId?(plan.rows||[]).find(r=>r.id===sideRowId):null;
+  const sideRecipe=sideRow?.recipeId?state.recipes.find(r=>r.id===sideRow.recipeId):null;
   const ings=state.ingredients||[];
   const extraColLabels=plan.extraColLabels||null;
   const WDAYS=['sun','mon','tue','wed','thu','fri','sat','sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
@@ -2067,24 +2068,16 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
                   <div style={{display:'flex',alignItems:'flex-start',gap:4}}>
                     <span style={{color:'var(--muted)',fontSize:14,marginTop:1,cursor:'grab',flexShrink:0}}>⠿</span>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontWeight:600,fontSize:13,lineHeight:1.35,cursor:appRec?'pointer':'default',color:appRec?'var(--sage-dark)':'inherit',wordBreak:'break-word'}}
-                        onClick={()=>appRec&&setSideRecipeId(sideRecipeId===row.recipeId?null:row.recipeId)}>
+                      {(()=>{const hasSide=!!(appRec||row.recimeLink||row.igLink);const open=sideRowId===row.id;return<>
+                      <div style={{fontWeight:600,fontSize:13,lineHeight:1.35,cursor:hasSide?'pointer':'default',color:hasSide?'var(--sage-dark)':'inherit',wordBreak:'break-word'}}
+                        onClick={()=>hasSide&&setSideRowId(open?null:row.id)}>
                         {row.name}
                       </div>
-                      <div style={{display:'flex',gap:5,marginTop:4,flexWrap:'wrap'}}>
-                        {appRec&&<button onClick={()=>setSideRecipeId(sideRecipeId===row.recipeId?null:row.recipeId)}
-                          style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,padding:'2px 6px',borderRadius:10,border:'1px solid var(--sage-light)',background:sideRecipeId===row.recipeId?'var(--sage-light)':'transparent',color:'var(--sage-dark)',cursor:'pointer',fontFamily:'inherit'}}>
-                          📖 Recipe
-                        </button>}
-                        {row.recimeLink&&<a href={row.recimeLink}target="_blank"rel="noreferrer"
-                          style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,padding:'2px 6px',borderRadius:10,border:'1px solid #d0d0d0',color:'#555',textDecoration:'none'}}>
-                          🔗 Recime
-                        </a>}
-                        {row.igLink&&<a href={row.igLink}target="_blank"rel="noreferrer"
-                          style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,padding:'2px 6px',borderRadius:10,border:'1px solid #f0a0c0',background:'#fff5f9',color:'#c2185b',textDecoration:'none'}}>
-                          📸 IG
-                        </a>}
-                      </div>
+                      {hasSide&&<button onClick={()=>setSideRowId(open?null:row.id)}
+                        style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,padding:'2px 6px',marginTop:4,borderRadius:10,border:`1px solid ${open?'var(--sage)':'var(--sage-light)'}`,background:open?'var(--sage-light)':'transparent',color:'var(--sage-dark)',cursor:'pointer',fontFamily:'inherit'}}>
+                        {appRec?'📖 Recipe':'🔗 Links'}
+                      </button>}
+                      </>})()}
                     </div>
                   </div>
                 </td>
@@ -2140,51 +2133,63 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
         </div>
       </div>
       {/* Side panel - recipe detail */}
-      {sideRecipe&&!isMobile&&<div style={{width:300,flexShrink:0,borderLeft:'2px solid var(--border)',overflow:'auto',background:'#fafaf8'}}>
+      {sideRow&&!isMobile&&<div style={{width:300,flexShrink:0,borderLeft:'2px solid var(--border)',overflow:'auto',background:'#fafaf8'}}>
         <div style={{position:'sticky',top:0,background:'#fafaf8',borderBottom:'1px solid var(--border)',padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',zIndex:2}}>
-          <span style={{fontWeight:700,fontSize:14,lineHeight:1.3}}>{sideRecipe.name}</span>
-          <button className="mclose"onClick={()=>setSideRecipeId(null)}style={{fontSize:18,flexShrink:0}}>×</button>
+          <span style={{fontWeight:700,fontSize:14,lineHeight:1.3}}>{sideRow.name}</span>
+          <button className="mclose"onClick={()=>setSideRowId(null)}style={{fontSize:18,flexShrink:0}}>×</button>
         </div>
         <div style={{padding:'0 14px 20px'}}>
-          {sideRecipe.imageUrl&&<img src={sideRecipe.imageUrl}alt=""style={{width:'100%',borderRadius:8,margin:'12px 0 10px',objectFit:'cover',maxHeight:150,display:'block'}}onError={imgOnError}/>}
-          {(sideRecipe.ingredientRefs||[]).length>0&&<div style={{marginTop:14}}>
-            <div style={{fontWeight:700,fontSize:11,color:'var(--sage-dark)',textTransform:'uppercase',letterSpacing:.8,marginBottom:8,paddingBottom:4,borderBottom:'2px solid var(--sage-light)'}}>🧺 Ingredients</div>
-            {sideRecipe.ingredientRefs.map(ref=>{
-              const ing=ings.find(i=>i.id===ref.id);
-              return<div key={ref.id}style={{fontSize:13,padding:'5px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:6,alignItems:'baseline'}}>
-                {ref.quantity&&<span style={{color:'var(--muted)',fontSize:11,minWidth:60,flexShrink:0}}>{ref.quantity}</span>}
-                <span style={{fontWeight:500}}>{ing?.name||'?'}</span>
-              </div>;
-            })}
+          {(sideRow.recimeLink||sideRow.igLink)&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}>
+            {sideRow.recimeLink&&<a href={sideRow.recimeLink}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 11px',borderRadius:8,border:'1px solid #d0d0d0',background:'white',color:'#444',textDecoration:'none',fontWeight:500}}>🔗 Recime →</a>}
+            {sideRow.igLink&&<a href={sideRow.igLink}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 11px',borderRadius:8,border:'1px solid #f0a0c0',background:'#fff5f9',color:'#c2185b',textDecoration:'none',fontWeight:500}}>📸 Instagram →</a>}
           </div>}
-          {(sideRecipe.instructions||[]).length>0&&<div style={{marginTop:18}}>
-            <div style={{fontWeight:700,fontSize:11,color:'#7b5ea7',textTransform:'uppercase',letterSpacing:.8,marginBottom:8,paddingBottom:4,borderBottom:'2px solid #d0c0f0'}}>📋 Instructions</div>
-            {sideRecipe.instructions.map((step,i)=><div key={i}style={{fontSize:13,padding:'6px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:8,alignItems:'flex-start'}}>
-              <span style={{fontWeight:700,color:'#7b5ea7',fontSize:12,minWidth:20,flexShrink:0,marginTop:1}}>{i+1}</span>
-              <span style={{lineHeight:1.5}}>{step}</span>
-            </div>)}
-          </div>}
-          {sideRecipe.url&&<a href={sideRecipe.url}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:14,fontSize:12,color:'var(--sage-dark)',textDecoration:'none',padding:'5px 10px',borderRadius:8,border:'1px solid var(--sage-light)',background:'white'}}>
-            🔗 View full recipe →
-          </a>}
-        </div>
-      </div>}
-      {/* Mobile side panel — slides up as a sheet */}
-      {sideRecipe&&isMobile&&<div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,0.35)'}}onClick={()=>setSideRecipeId(null)}>
-        <div style={{position:'absolute',bottom:0,left:0,right:0,maxHeight:'75vh',background:'white',borderRadius:'16px 16px 0 0',overflow:'auto'}}onClick={e=>e.stopPropagation()}>
-          <div style={{position:'sticky',top:0,background:'white',padding:'12px 16px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span style={{fontWeight:700,fontSize:15}}>{sideRecipe.name}</span>
-            <button className="mclose"onClick={()=>setSideRecipeId(null)}>×</button>
-          </div>
-          <div style={{padding:'0 16px 20px'}}>
+          {sideRecipe&&<>
+            {sideRecipe.imageUrl&&<img src={sideRecipe.imageUrl}alt=""style={{width:'100%',borderRadius:8,margin:'12px 0 10px',objectFit:'cover',maxHeight:150,display:'block'}}onError={imgOnError}/>}
             {(sideRecipe.ingredientRefs||[]).length>0&&<div style={{marginTop:14}}>
               <div style={{fontWeight:700,fontSize:11,color:'var(--sage-dark)',textTransform:'uppercase',letterSpacing:.8,marginBottom:8,paddingBottom:4,borderBottom:'2px solid var(--sage-light)'}}>🧺 Ingredients</div>
-              {sideRecipe.ingredientRefs.map(ref=>{const ing=ings.find(i=>i.id===ref.id);return<div key={ref.id}style={{fontSize:13,padding:'5px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:6}}>{ref.quantity&&<span style={{color:'var(--muted)',fontSize:11,minWidth:55}}>{ref.quantity}</span>}<span style={{fontWeight:500}}>{ing?.name||'?'}</span></div>;})}
+              {sideRecipe.ingredientRefs.map(ref=>{
+                const ing=ings.find(i=>i.id===ref.id);
+                return<div key={ref.id}style={{fontSize:13,padding:'5px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:6,alignItems:'baseline'}}>
+                  {ref.quantity&&<span style={{color:'var(--muted)',fontSize:11,minWidth:60,flexShrink:0}}>{ref.quantity}</span>}
+                  <span style={{fontWeight:500}}>{ing?.name||'?'}</span>
+                </div>;
+              })}
             </div>}
             {(sideRecipe.instructions||[]).length>0&&<div style={{marginTop:18}}>
               <div style={{fontWeight:700,fontSize:11,color:'#7b5ea7',textTransform:'uppercase',letterSpacing:.8,marginBottom:8,paddingBottom:4,borderBottom:'2px solid #d0c0f0'}}>📋 Instructions</div>
-              {sideRecipe.instructions.map((step,i)=><div key={i}style={{fontSize:13,padding:'6px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:8}}><span style={{fontWeight:700,color:'#7b5ea7',minWidth:20}}>{i+1}</span><span>{step}</span></div>)}
+              {sideRecipe.instructions.map((step,i)=><div key={i}style={{fontSize:13,padding:'6px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:8,alignItems:'flex-start'}}>
+                <span style={{fontWeight:700,color:'#7b5ea7',fontSize:12,minWidth:20,flexShrink:0,marginTop:1}}>{i+1}</span>
+                <span style={{lineHeight:1.5}}>{step}</span>
+              </div>)}
             </div>}
+            {sideRecipe.url&&<a href={sideRecipe.url}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:14,fontSize:12,color:'var(--sage-dark)',textDecoration:'none',padding:'5px 10px',borderRadius:8,border:'1px solid var(--sage-light)',background:'white'}}>
+              🔗 View full recipe →
+            </a>}
+          </>}
+        </div>
+      </div>}
+      {/* Mobile side panel — slides up as a sheet */}
+      {sideRow&&isMobile&&<div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,0.35)'}}onClick={()=>setSideRowId(null)}>
+        <div style={{position:'absolute',bottom:0,left:0,right:0,maxHeight:'75vh',background:'white',borderRadius:'16px 16px 0 0',overflow:'auto'}}onClick={e=>e.stopPropagation()}>
+          <div style={{position:'sticky',top:0,background:'white',padding:'12px 16px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontWeight:700,fontSize:15}}>{sideRow.name}</span>
+            <button className="mclose"onClick={()=>setSideRowId(null)}>×</button>
+          </div>
+          <div style={{padding:'0 16px 20px'}}>
+            {(sideRow.recimeLink||sideRow.igLink)&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}>
+              {sideRow.recimeLink&&<a href={sideRow.recimeLink}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 11px',borderRadius:8,border:'1px solid #d0d0d0',background:'white',color:'#444',textDecoration:'none'}}>🔗 Recime →</a>}
+              {sideRow.igLink&&<a href={sideRow.igLink}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 11px',borderRadius:8,border:'1px solid #f0a0c0',background:'#fff5f9',color:'#c2185b',textDecoration:'none'}}>📸 Instagram →</a>}
+            </div>}
+            {sideRecipe&&<>
+              {(sideRecipe.ingredientRefs||[]).length>0&&<div style={{marginTop:14}}>
+                <div style={{fontWeight:700,fontSize:11,color:'var(--sage-dark)',textTransform:'uppercase',letterSpacing:.8,marginBottom:8,paddingBottom:4,borderBottom:'2px solid var(--sage-light)'}}>🧺 Ingredients</div>
+                {sideRecipe.ingredientRefs.map(ref=>{const ing=ings.find(i=>i.id===ref.id);return<div key={ref.id}style={{fontSize:13,padding:'5px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:6}}>{ref.quantity&&<span style={{color:'var(--muted)',fontSize:11,minWidth:55}}>{ref.quantity}</span>}<span style={{fontWeight:500}}>{ing?.name||'?'}</span></div>;})}
+              </div>}
+              {(sideRecipe.instructions||[]).length>0&&<div style={{marginTop:18}}>
+                <div style={{fontWeight:700,fontSize:11,color:'#7b5ea7',textTransform:'uppercase',letterSpacing:.8,marginBottom:8,paddingBottom:4,borderBottom:'2px solid #d0c0f0'}}>📋 Instructions</div>
+                {sideRecipe.instructions.map((step,i)=><div key={i}style={{fontSize:13,padding:'6px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:8}}><span style={{fontWeight:700,color:'#7b5ea7',minWidth:20}}>{i+1}</span><span>{step}</span></div>)}
+              </div>}
+            </>}
           </div>
         </div>
       </div>}
