@@ -1993,8 +1993,14 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
   const isMobile=useIsMobile();
   const sideRecipe=sideRecipeId?state.recipes.find(r=>r.id===sideRecipeId):null;
   const ings=state.ingredients||[];
-  const extraColLabels=plan.extraColLabels||[];
-  const isExtraCol=day=>extraColLabels.includes(day);
+  const extraColLabels=plan.extraColLabels||null;
+  const WDAYS=['sun','mon','tue','wed','thu','fri','sat','sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  const isExtraCol=day=>{
+    if(extraColLabels)return extraColLabels.includes(day);
+    // fallback: if label has no weekday name → treat as accent col
+    const low=day.toLowerCase();
+    return!WDAYS.some(w=>low.includes(w));
+  };
 
   function saveCell(rowId,day,text){
     dispatch({type:'COOK_PLAN_SET_CELL',planId:plan.id,rowId,day,text});
@@ -2103,7 +2109,7 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
                                 style={{display:'flex',alignItems:'flex-start',gap:5,padding:'3px 2px',cursor:'pointer',userSelect:'none',borderRadius:4,transition:'background .1s'}}
                                 onMouseEnter={e=>e.currentTarget.style.background='rgba(0,0,0,0.04)'}
                                 onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                <span style={{fontSize:13,lineHeight:'17px',flexShrink:0,color:done?'var(--sage)':'#bbb',marginTop:1}}>{done?'✓':'•'}</span>
+                                <span style={{fontSize:11,lineHeight:'17px',flexShrink:0,color:done?'var(--sage)':'#aaa',marginTop:1}}>{done?'✓':'☐'}</span>
                                 <span style={{fontSize:12,lineHeight:'17px',textDecoration:done?'line-through':'none',color:done?'var(--muted)':'inherit'}}>{line}</span>
                               </div>;
                             })
