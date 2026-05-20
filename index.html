@@ -2128,7 +2128,7 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
                               </div>;
                             })}
                             <button className="cook-cell-edit"onClick={()=>setEditingCell({rowId:row.id,day})}title="Edit"
-                              style={{position:'absolute',top:3,right:3,background:'white',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px',fontSize:10,cursor:'pointer',color:'var(--muted)',lineHeight:'16px',opacity:0,transition:'opacity .15s'}}>✏</button>
+                              style={{position:'absolute',top:3,right:3,background:'white',border:'1px solid var(--border)',borderRadius:4,padding:'1px 4px',fontSize:12,cursor:'pointer',lineHeight:'16px',opacity:0,transition:'opacity .15s'}}>✏️</button>
                           </>
                           :<span onClick={()=>setEditingCell({rowId:row.id,day})}style={{color:'#ccc',fontSize:20,lineHeight:'60px',display:'block',textAlign:'center',cursor:'text'}}>+</span>}
                       </div>}
@@ -2163,10 +2163,19 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
           <button className="mclose"onClick={()=>setSideRowId(null)}style={{fontSize:18,flexShrink:0}}>×</button>
         </div>
         <div style={{padding:'0 14px 20px'}}>
-          {(sideRow.recimeLink||sideRow.igLink)&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}>
-            {sideRow.recimeLink&&<a href={sideRow.recimeLink}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 11px',borderRadius:8,border:'1px solid #d0d0d0',background:'white',color:'#444',textDecoration:'none',fontWeight:500}}>🔗 Recime →</a>}
-            {sideRow.igLink&&<a href={sideRow.igLink}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 11px',borderRadius:8,border:'1px solid #f0a0c0',background:'#fff5f9',color:'#c2185b',textDecoration:'none',fontWeight:500}}>📸 Instagram →</a>}
-          </div>}
+          {(()=>{
+            const isIg=u=>u&&u.includes('instagram.com');
+            const igUrl=sideRow.igLink||(isIg(sideRecipe?.url)?sideRecipe.url:null)||(isIg(sideRecipe?.sourceUrl)?sideRecipe.sourceUrl:null);
+            const recipeUrl=sideRecipe?.url&&!isIg(sideRecipe.url)?sideRecipe.url:null;
+            const sourceUrl=sideRecipe?.sourceUrl&&!isIg(sideRecipe.sourceUrl)?sideRecipe.sourceUrl:null;
+            const hasLinks=sideRow.recimeLink||igUrl||recipeUrl||sourceUrl;
+            return hasLinks&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}>
+              {sideRow.recimeLink&&<a href={sideRow.recimeLink}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 11px',borderRadius:8,border:'1px solid #d0d0d0',background:'white',color:'#444',textDecoration:'none',fontWeight:500}}>🔗 Recime →</a>}
+              {igUrl&&<a href={igUrl}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 11px',borderRadius:8,border:'1px solid #f0a0c0',background:'#fff5f9',color:'#c2185b',textDecoration:'none',fontWeight:500}}>📸 Instagram →</a>}
+              {recipeUrl&&<a href={recipeUrl}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 11px',borderRadius:8,border:'1px solid var(--sage-light)',background:'white',color:'var(--sage-dark)',textDecoration:'none',fontWeight:500}}>🔗 Recipe →</a>}
+              {sourceUrl&&!recipeUrl&&<a href={sourceUrl}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 11px',borderRadius:8,border:'1px solid #d0d0d0',background:'white',color:'#444',textDecoration:'none',fontWeight:500}}>🔗 Source →</a>}
+            </div>;
+          })()}
           {sideRecipe&&<>
             {sideRecipe.imageUrl&&<img src={sideRecipe.imageUrl}alt=""style={{width:'100%',borderRadius:8,margin:'12px 0 10px',objectFit:'cover',maxHeight:150,display:'block'}}onError={imgOnError}/>}
             {(sideRecipe.ingredientRefs||[]).length>0&&<div style={{marginTop:14}}>
@@ -2186,9 +2195,6 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
                 <span style={{lineHeight:1.5}}>{step}</span>
               </div>)}
             </div>}
-            {sideRecipe.url&&<a href={sideRecipe.url}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:14,fontSize:12,color:'var(--sage-dark)',textDecoration:'none',padding:'5px 10px',borderRadius:8,border:'1px solid var(--sage-light)',background:'white'}}>
-              🔗 View full recipe →
-            </a>}
           </>}
         </div>
       </div>}
@@ -4347,7 +4353,12 @@ function App({user,onSignOut}){
   const isNanny=NANNY_EMAILS.includes(user?.email||'');
   const isMobile=useIsMobile();
   const TAB_IDS=['mealplan','needs','shop','recipes','holidays','noa','cheese'];
-  const[tab,setTab]=useState(()=>{const h=location.hash.slice(1);return TAB_IDS.includes(h)?h:NANNY_EMAILS.includes(user?.email||'')?'noa':'mealplan';});
+  const[tab,setTab]=useState(()=>{
+    // If hash is a plan URL, force mealplan tab
+    if(location.hash.startsWith('#plan='))return'mealplan';
+    const h=location.hash.slice(1);
+    return TAB_IDS.includes(h)?h:NANNY_EMAILS.includes(user?.email||'')?'noa':'mealplan';
+  });
   useEffect(()=>{history.replaceState(null,'','#'+tab);},[tab]);
   const[state,dispatch]=useReducer(reducer,null);
   const[toast,setToast]=useState(null);
