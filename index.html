@@ -2009,6 +2009,8 @@ function CookPlanEditor({plan,state,dispatch,onBack,showToast}){
   const[deleting,setDeleting]=useState(null);
   const[dragRowId,setDragRowId]=useState(null);
   const[dragOverIdx,setDragOverIdx]=useState(null);
+  const[editingSectionId,setEditingSectionId]=useState(null);
+  const[sectionName,setSectionName]=useState('');
   const isMobile=useIsMobile();
   const sideRow=sideRowId?(plan.rows||[]).find(r=>r.id===sideRowId):null;
   const sideRecipe=sideRow?.recipeId?state.recipes.find(r=>r.id===sideRow.recipeId):null;
@@ -2038,6 +2040,16 @@ function CookPlanEditor({plan,state,dispatch,onBack,showToast}){
       if(fi>=0&&fi!==toIndex)dispatch({type:'COOK_PLAN_MOVE_ROW',planId:plan.id,rowId:dragRowId,toIndex});
     }
     setDragRowId(null);setDragOverIdx(null);
+  }
+  function addSection(){
+    const id=uid();
+    dispatch({type:'COOK_PLAN_UPSERT_ROW',planId:plan.id,row:{id,type:'section',name:'New Section',cells:{}}});
+    setEditingSectionId(id);setSectionName('New Section');
+  }
+  function saveSectionName(id,name){
+    const trimmed=name.trim()||'Untitled';
+    dispatch({type:'COOK_PLAN_UPSERT_ROW',planId:plan.id,row:{...(plan.rows||[]).find(r=>r.id===id),name:trimmed}});
+    setEditingSectionId(null);
   }
 
   const colW=isMobile?120:160;
@@ -2076,6 +2088,38 @@ function CookPlanEditor({plan,state,dispatch,onBack,showToast}){
               const rowBg=ri%2===0?'var(--bg)':'#f9f8f6';
               const isDragging=dragRowId===row.id;
               const isDragOver=dragOverIdx===ri&&dragRowId!==row.id;
+              // Section header row
+              if(row.type==='section'){
+                return<tr key={row.id}
+                  draggable={true}
+                  onDragStart={()=>setDragRowId(row.id)}
+                  onDragEnd={()=>{setDragRowId(null);setDragOverIdx(null);}}
+                  onDragOver={e=>{e.preventDefault();setDragOverIdx(ri);}}
+                  onDrop={e=>handleDrop(e,ri)}
+                  style={{opacity:isDragging?0.4:1,cursor:'grab'}}>
+                  <td colSpan={plan.days.length+2}
+                    style={{padding:'16px 10px 4px',borderBottom:'2px solid var(--sage-light)',background:isDragOver?'#edf7ee':'transparent',outline:isDragOver?'2px solid var(--sage)':'none'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <span style={{color:'var(--muted)',fontSize:14,cursor:'grab',flexShrink:0}}>⠿</span>
+                      {editingSectionId===row.id
+                        ?<input autoFocus value={sectionName}
+                            onChange={e=>setSectionName(e.target.value)}
+                            onBlur={()=>saveSectionName(row.id,sectionName)}
+                            onKeyDown={e=>{if(e.key==='Enter')saveSectionName(row.id,sectionName);if(e.key==='Escape'){setEditingSectionId(null);}}}
+                            style={{flex:1,border:'1.5px solid var(--sage)',borderRadius:6,padding:'3px 8px',fontSize:12,fontWeight:700,fontFamily:'inherit',letterSpacing:.5,textTransform:'uppercase',color:'var(--sage-dark)',background:'white'}}/>
+                        :<span onClick={()=>{setEditingSectionId(row.id);setSectionName(row.name);}}
+                            style={{flex:1,fontWeight:800,fontSize:11,color:'var(--sage-dark)',textTransform:'uppercase',letterSpacing:1,cursor:'text'}}>
+                          {row.name||'Untitled Section'}
+                        </span>}
+                      <button onClick={()=>dispatch({type:'COOK_PLAN_DEL_ROW',planId:plan.id,rowId:row.id})}
+                        title="Remove section"
+                        style={{background:'none',border:'none',cursor:'pointer',fontSize:13,padding:'2px 6px',color:'var(--muted)',opacity:.5,transition:'opacity .15s',marginLeft:'auto'}}
+                        onMouseEnter={e=>e.currentTarget.style.opacity='1'}
+                        onMouseLeave={e=>e.currentTarget.style.opacity='.5'}>🗑</button>
+                    </div>
+                  </td>
+                </tr>;
+              }
               return<tr key={row.id}
                 draggable={true}
                 onDragStart={()=>setDragRowId(row.id)}
@@ -2153,8 +2197,9 @@ function CookPlanEditor({plan,state,dispatch,onBack,showToast}){
             })}
           </tbody>
         </table>
-        <div style={{padding:'12px 14px'}}>
+        <div style={{padding:'12px 14px',display:'flex',gap:8}}>
           <button className="btn btn-secondary btn-sm"onClick={()=>setAddingRow(true)}>+ Add dish</button>
+          <button className="btn btn-secondary btn-sm"onClick={addSection}style={{color:'var(--sage-dark)',borderColor:'var(--sage-light)'}}>＋ Add section</button>
         </div>
       </div>
       {/* Side panel - recipe detail */}
@@ -2188,8 +2233,8 @@ function CookPlanEditor({plan,state,dispatch,onBack,showToast}){
               {sideRecipe.ingredientRefs.map(ref=>{
                 const ing=ings.find(i=>i.id===ref.id);
                 return<div key={ref.id}style={{fontSize:13,padding:'5px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:6,alignItems:'baseline'}}>
-                  {ref.quantity&&<span style={{color:'var(--muted)',fontSize:11,minWidth:60,flexShrink:0}}>{ref.quantity}</span>}
-                  <span style={{fontWeight:500}}>{ing?.name||'?'}</span>
+                  <span style={{fontWeight:500,flex:1}}>{ing?.name||'?'}</span>
+                  {ref.quantity&&<span style={{color:'var(--muted)',fontSize:11,flexShrink:0}}>{ref.quantity}</span>}
                 </div>;
               })}
             </div>}
@@ -4368,7 +4413,7 @@ function App({user,onSignOut}){
     const h=location.hash.slice(1);
     return TAB_IDS.includes(h)?h:NANNY_EMAILS.includes(user?.email||'')?'noa':'mealplan';
   });
-  useEffect(()=>{history.replaceState(null,'','#'+tab);},[tab]);
+  useEffect(()=>{if(!location.hash.startsWith('#plan='))history.replaceState(null,'','#'+tab);},[tab]);
   const[state,dispatch]=useReducer(reducer,null);
   const[toast,setToast]=useState(null);
   const[showSync,setShowSync]=useState(false);
