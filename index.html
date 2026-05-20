@@ -398,6 +398,7 @@ textarea.inp{resize:vertical;min-height:70px;}
 .cook-hl{background:#fff3cd;border-bottom:1.5px solid #f0c040;cursor:pointer;border-radius:3px;padding:0 2px;}
 .cook-hl:hover,.cook-hl.active{background:#ffe082;}
 .cook-tip{position:fixed;background:#2d2d2d;color:white;padding:5px 11px;border-radius:8px;font-size:12px;white-space:nowrap;z-index:10000;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,0.22);}
+.cook-cell:hover .cook-cell-edit{opacity:1!important;}
 .modal-section{margin-top:14px;}
 .modal-section-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
 
@@ -1880,8 +1881,25 @@ function useIsMobile(){
 // ── Cook Plan Components ──────────────────────────────────────────────────────
 
 function CookPlanOverlay({state,dispatch,onClose}){
-  const[planId,setPlanId]=useState(null);
+  // Read plan ID from hash on mount; e.g. #plan=abc123
+  const[planId,setPlanId]=useState(()=>{
+    const m=location.hash.match(/^#plan=(.+)$/);
+    return m?m[1]:null;
+  });
   const[creating,setCreating]=useState(false);
+
+  // Keep hash in sync with active plan
+  useEffect(()=>{
+    if(planId)history.replaceState(null,'','#plan='+planId);
+    else history.replaceState(null,'','#plans');
+  },[planId]);
+
+  // On close, clear hash
+  function handleClose(){history.replaceState(null,'','#');onClose();}
+  // Override setPlanId to also update hash
+  function openPlan(id){setPlanId(id);}
+  function closePlan(){setPlanId(null);}
+
   const[newName,setNewName]=useState('');
   const[startDate,setStartDate]=useState('');
   const[endDate,setEndDate]=useState('');
@@ -1908,8 +1926,8 @@ function CookPlanOverlay({state,dispatch,onClose}){
   // Early return AFTER all hooks
   if(planId){
     const plan=state.cookPlans?.[planId];
-    if(!plan){setPlanId(null);return null;}
-    return<CookPlanEditor plan={plan} state={state} dispatch={dispatch} onBack={()=>setPlanId(null)}/>;
+    if(!plan){closePlan();return null;}
+    return<CookPlanEditor plan={plan} state={state} dispatch={dispatch} onBack={closePlan}/>;
   }
 
   function resetCreating(){setCreating(false);setNewName('');setStartDate('');setEndDate('');setLabels({});setExtraCols([]);setExtraInput('');}
@@ -1925,7 +1943,7 @@ function CookPlanOverlay({state,dispatch,onClose}){
     const id=uid();
     dispatch({type:'COOK_PLAN_UPSERT',plan:{id,name,days,extraColLabels,rows:[],createdAt:Date.now()}});
     resetCreating();
-    setPlanId(id);
+    openPlan(id);
   }
 
   function addExtraCol(){
@@ -1937,11 +1955,11 @@ function CookPlanOverlay({state,dispatch,onClose}){
 
   const canCreate=newName.trim()&&dateDays.length>0;
 
-  return<div className="overlay"onClick={e=>e.target===e.currentTarget&&onClose()}>
+  return<div className="overlay"onClick={e=>e.target===e.currentTarget&&handleClose()}>
     <div className="modal"style={{maxWidth:500}}>
-      <div className="mhdr"><div className="mtitle">🎉 Holiday Plans</div><button className="mclose"onClick={onClose}>×</button></div>
+      <div className="mhdr"><div className="mtitle">🎉 Holiday Plans</div><button className="mclose"onClick={handleClose}>×</button></div>
       {plans.length===0&&!creating&&<div style={{color:'var(--muted)',textAlign:'center',padding:'20px 0',fontSize:14}}>No plans yet — create your first one!</div>}
-      {plans.map(p=><div key={p.id}onClick={()=>setPlanId(p.id)}style={{display:'flex',flexDirection:'column',gap:2,padding:'12px 0',borderBottom:'1px solid var(--border)',cursor:'pointer'}}>
+      {plans.map(p=><div key={p.id}onClick={()=>openPlan(p.id)}style={{display:'flex',flexDirection:'column',gap:2,padding:'12px 0',borderBottom:'1px solid var(--border)',cursor:'pointer'}}>
         <div style={{fontWeight:600}}>{p.name}</div>
         <div style={{fontSize:12,color:'var(--muted)'}}>{(p.days||[]).slice(0,4).join(' · ')}{(p.days||[]).length>4?` + ${(p.days||[]).length-4} more`:''} &middot; {(p.rows||[]).length} dish{(p.rows||[]).length!==1?'es':''}</div>
       </div>)}
@@ -2092,20 +2110,26 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
                           onKeyDown={e=>e.key==='Escape'&&setEditingCell(null)}
                           style={{width:'100%',height:'100%',minHeight:80,resize:'none',border:'2px solid var(--sage)',borderRadius:4,padding:'6px 8px',fontSize:12,background:'white',boxSizing:'border-box',lineHeight:1.6}}
                           placeholder="One item per line…"/>
-                      :<div style={{minHeight:60,padding:'4px 6px',cursor:'text',position:'relative'}}
-                          onClick={e=>{if(e.target===e.currentTarget||e.target.tagName==='DIV')setEditingCell({rowId:row.id,day});}}>
+                      :<div style={{minHeight:60,padding:'4px 6px',position:'relative'}}
+                          className="cook-cell">
                         {(cell.text||'').trim()
-                          ?(cell.text||'').split('\n').filter(l=>l.trim()).map((line,li)=>{
+                          ?<>
+                            {(cell.text||'').split('\n').filter(l=>l.trim()).map((line,li)=>{
+                              const isHdr=line===line.toUpperCase()&&/[A-Z]/.test(line);
+                              if(isHdr)return<div key={li}style={{fontWeight:700,fontSize:11,letterSpacing:.6,color:'var(--text)',padding:'6px 2px 2px',marginTop:li===0?0:4}}>{line}</div>;
                               const done=(cell.doneLines||[]).includes(li);
                               return<div key={li}
                                 onClick={e=>{e.stopPropagation();dispatch({type:'COOK_PLAN_TOGGLE_LINE',planId:plan.id,rowId:row.id,day,lineIdx:li});}}
-                                style={{display:'flex',alignItems:'flex-start',gap:5,padding:'3px 2px',cursor:'pointer',userSelect:'none',borderRadius:4,transition:'background .1s'}}
+                                style={{display:'flex',alignItems:'flex-start',gap:5,padding:'2px 2px',cursor:'pointer',userSelect:'none',borderRadius:4,transition:'background .1s'}}
                                 onMouseEnter={e=>e.currentTarget.style.background='rgba(0,0,0,0.04)'}
                                 onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                                 <span style={{fontSize:11,lineHeight:'17px',flexShrink:0,color:done?'var(--sage)':'#aaa',marginTop:1}}>{done?'✓':'☐'}</span>
                                 <span style={{fontSize:12,lineHeight:'17px',textDecoration:done?'line-through':'none',color:done?'var(--muted)':'inherit'}}>{line}</span>
                               </div>;
-                            })
+                            })}
+                            <button className="cook-cell-edit"onClick={()=>setEditingCell({rowId:row.id,day})}title="Edit"
+                              style={{position:'absolute',top:3,right:3,background:'white',border:'1px solid var(--border)',borderRadius:4,padding:'1px 5px',fontSize:10,cursor:'pointer',color:'var(--muted)',lineHeight:'16px',opacity:0,transition:'opacity .15s'}}>✏</button>
+                          </>
                           :<span onClick={()=>setEditingCell({rowId:row.id,day})}style={{color:'#ccc',fontSize:20,lineHeight:'60px',display:'block',textAlign:'center',cursor:'text'}}>+</span>}
                       </div>}
                   </td>;
@@ -2304,7 +2328,16 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
   const[qIngsList,setQIngsList]=useState([]); // [{id,name}] chips
   const[noaTag,setNoaTag]=useState('Nutbear');
   const[noaTagExpanded,setNoaTagExpanded]=useState(false);
-  const[cookPlanOpen,setCookPlanOpen]=useState(false);
+  // Hash-based routing for holiday plans: #plan=<id>
+  const[cookPlanOpen,setCookPlanOpen]=useState(()=>location.hash.startsWith('#plan='));
+  useEffect(()=>{
+    function onHash(){
+      if(location.hash.startsWith('#plan='))setCookPlanOpen(true);
+      else setCookPlanOpen(false);
+    }
+    window.addEventListener('hashchange',onHash);
+    return()=>window.removeEventListener('hashchange',onHash);
+  },[]);
   const isMobile=useIsMobile();
   const today=DAYS[new Date().getDay()].toLowerCase();
   const days=state.mealPlan?.days||{};
