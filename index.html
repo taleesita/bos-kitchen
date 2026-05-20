@@ -688,8 +688,12 @@ function reducer(state,action){
       const rows=[...(plan.rows||[])];
       const idx=rows.findIndex(r=>r.id===action.rowId);
       if(idx<0)return state;
-      const newIdx=Math.max(0,Math.min(rows.length-1,idx+action.delta));
-      const [moved]=rows.splice(idx,1);rows.splice(newIdx,0,moved);
+      if(action.toIndex!==undefined){
+        const[moved]=rows.splice(idx,1);rows.splice(action.toIndex,0,moved);
+      } else {
+        const ni=Math.max(0,Math.min(rows.length-1,idx+action.delta));
+        const[moved]=rows.splice(idx,1);rows.splice(ni,0,moved);
+      }
       return{...state,cookPlans:{...state.cookPlans,[action.planId]:{...plan,rows}}};
     }
     default:return state;
@@ -1905,8 +1909,9 @@ function CookPlanOverlay({state,dispatch,onClose}){
       ...dateDays.map(d=>labels[d.iso]?.trim()||d.auto),
       ...extraCols.map(c=>c.label)
     ];
+    const extraColLabels=extraCols.map(c=>c.label);
     const id=uid();
-    dispatch({type:'COOK_PLAN_UPSERT',plan:{id,name,days,rows:[],createdAt:Date.now()}});
+    dispatch({type:'COOK_PLAN_UPSERT',plan:{id,name,days,extraColLabels,rows:[],createdAt:Date.now()}});
     resetCreating();
     setPlanId(id);
   }
@@ -1966,28 +1971,41 @@ function CookPlanOverlay({state,dispatch,onClose}){
 
 function CookPlanEditor({plan,state,dispatch,onBack}){
   const[sideRecipeId,setSideRecipeId]=useState(null);
-  const[editingCell,setEditingCell]=useState(null); // {rowId,day}
+  const[editingCell,setEditingCell]=useState(null);
   const[addingRow,setAddingRow]=useState(false);
   const[editingName,setEditingName]=useState(false);
   const[planName,setPlanName]=useState(plan.name);
-  const[deleting,setDeleting]=useState(null); // rowId to confirm delete
+  const[deleting,setDeleting]=useState(null);
+  const[dragRowId,setDragRowId]=useState(null);
+  const[dragOverIdx,setDragOverIdx]=useState(null);
   const isMobile=useIsMobile();
   const sideRecipe=sideRecipeId?state.recipes.find(r=>r.id===sideRecipeId):null;
   const ings=state.ingredients||[];
+  const extraColLabels=plan.extraColLabels||[];
+  const isExtraCol=day=>extraColLabels.includes(day);
 
   function saveCell(rowId,day,text){
     dispatch({type:'COOK_PLAN_SET_CELL',planId:plan.id,rowId,day,text});
     setEditingCell(null);
   }
-
   function saveName(){
     if(planName.trim()&&planName.trim()!==plan.name)
       dispatch({type:'COOK_PLAN_UPSERT',plan:{...plan,name:planName.trim()}});
     setEditingName(false);
   }
+  function handleDrop(e,toIndex){
+    e.preventDefault();
+    if(dragRowId){
+      const fi=(plan.rows||[]).findIndex(r=>r.id===dragRowId);
+      if(fi>=0&&fi!==toIndex)dispatch({type:'COOK_PLAN_MOVE_ROW',planId:plan.id,rowId:dragRowId,toIndex});
+    }
+    setDragRowId(null);setDragOverIdx(null);
+  }
 
   const colW=isMobile?120:160;
-  const rowNameW=isMobile?100:140;
+  const rowNameW=isMobile?120:160;
+  const extraBg='#f3f0ff';
+  const extraThBg='#e9e4f8';
 
   return<div style={{position:'fixed',inset:0,background:'var(--bg)',zIndex:400,display:'flex',flexDirection:'column',overflow:'hidden'}}>
     {/* Header */}
@@ -1995,8 +2013,7 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
       <button className="btn btn-secondary btn-sm"onClick={onBack}>← Back</button>
       {editingName
         ?<input className="inp"value={planName}onChange={e=>setPlanName(e.target.value)}onBlur={saveName}onKeyDown={e=>{if(e.key==='Enter')saveName();if(e.key==='Escape'){setPlanName(plan.name);setEditingName(false);}}}autoFocus style={{flex:1,fontSize:16,fontWeight:700}}/>
-        :<span onClick={()=>setEditingName(true)} style={{flex:1,fontSize:16,fontWeight:700,cursor:'text'}}>{plan.name}</span>}
-      {sideRecipe&&!isMobile&&<div style={{width:300,flexShrink:0}}/>}
+        :<span onClick={()=>setEditingName(true)}style={{flex:1,fontSize:16,fontWeight:700,cursor:'text'}}>{plan.name}</span>}
     </div>
     {/* Body */}
     <div style={{flex:1,overflow:'hidden',display:'flex'}}>
@@ -2005,61 +2022,89 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
         <table style={{borderCollapse:'collapse',minWidth:'100%',tableLayout:'fixed'}}>
           <colgroup>
             <col style={{width:rowNameW}}/>
-            {plan.days.map(d=><col key={d} style={{width:colW}}/>)}
+            {plan.days.map(d=><col key={d}style={{width:isExtraCol(d)?colW+20:colW}}/>)}
+            <col style={{width:44}}/>
           </colgroup>
           <thead>
             <tr>
               <th style={{...thStyle,position:'sticky',left:0,zIndex:2,background:'var(--bg)'}}>Dish</th>
-              {plan.days.map(d=><th key={d}style={thStyle}>{d}</th>)}
-              <th style={{...thStyle,width:36}}></th>
+              {plan.days.map(d=><th key={d}style={{...thStyle,background:isExtraCol(d)?extraThBg:'var(--bg)',borderLeft:isExtraCol(d)?'2px solid #c8bef0':'none'}}>{d}</th>)}
+              <th style={{...thStyle,width:44,background:'var(--bg)'}}></th>
             </tr>
           </thead>
           <tbody>
             {(plan.rows||[]).map((row,ri)=>{
               const appRec=row.recipeId?state.recipes.find(r=>r.id===row.recipeId):null;
-              return<tr key={row.id}style={{background:ri%2===0?'transparent':'rgba(0,0,0,0.02)'}}>
-                <td style={{...tdStyle,position:'sticky',left:0,background:ri%2===0?'var(--bg)':'#f9f9f8',zIndex:1,verticalAlign:'top',padding:'8px 6px'}}>
-                  <div style={{fontWeight:600,fontSize:13,lineHeight:1.3,cursor:appRec?'pointer':'default',color:appRec?'var(--green)':'inherit'}}
-                    onClick={()=>appRec&&setSideRecipeId(sideRecipeId===row.recipeId?null:row.recipeId)}>
-                    {row.name}{appRec?<span style={{fontSize:10,marginLeft:3}}>📖</span>:''}
-                  </div>
-                  <div style={{display:'flex',gap:4,marginTop:3,flexWrap:'wrap'}}>
-                    {row.recimeLink&&<a href={row.recimeLink}target="_blank"rel="noreferrer"style={{fontSize:10,color:'var(--muted)'}}>Recime</a>}
-                    {row.igLink&&<a href={row.igLink}target="_blank"rel="noreferrer"style={{fontSize:10,color:'var(--muted)'}}>IG</a>}
-                  </div>
-                  <div style={{display:'flex',gap:2,marginTop:4}}>
-                    {ri>0&&<button onClick={()=>dispatch({type:'COOK_PLAN_MOVE_ROW',planId:plan.id,rowId:row.id,delta:-1})}style={arrowBtn}>↑</button>}
-                    {ri<(plan.rows||[]).length-1&&<button onClick={()=>dispatch({type:'COOK_PLAN_MOVE_ROW',planId:plan.id,rowId:row.id,delta:1})}style={arrowBtn}>↓</button>}
-                    <button onClick={()=>setDeleting(row.id)}style={{...arrowBtn,color:'var(--danger,#c0392b)'}}>×</button>
+              const rowBg=ri%2===0?'var(--bg)':'#f9f8f6';
+              const isDragging=dragRowId===row.id;
+              const isDragOver=dragOverIdx===ri&&dragRowId!==row.id;
+              return<tr key={row.id}
+                draggable={true}
+                onDragStart={()=>setDragRowId(row.id)}
+                onDragEnd={()=>{setDragRowId(null);setDragOverIdx(null);}}
+                onDragOver={e=>{e.preventDefault();setDragOverIdx(ri);}}
+                onDrop={e=>handleDrop(e,ri)}
+                style={{opacity:isDragging?0.4:1,background:isDragOver?'#edf7ee':rowBg,outline:isDragOver?'2px solid var(--sage)':'none',cursor:'grab',transition:'background .1s'}}>
+                <td style={{...tdStyle,position:'sticky',left:0,background:isDragOver?'#edf7ee':rowBg,zIndex:1,verticalAlign:'top',padding:'8px 8px 8px 10px'}}>
+                  <div style={{display:'flex',alignItems:'flex-start',gap:4}}>
+                    <span style={{color:'var(--muted)',fontSize:14,marginTop:1,cursor:'grab',flexShrink:0}}>⠿</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:600,fontSize:13,lineHeight:1.35,cursor:appRec?'pointer':'default',color:appRec?'var(--sage-dark)':'inherit',wordBreak:'break-word'}}
+                        onClick={()=>appRec&&setSideRecipeId(sideRecipeId===row.recipeId?null:row.recipeId)}>
+                        {row.name}
+                      </div>
+                      <div style={{display:'flex',gap:5,marginTop:4,flexWrap:'wrap'}}>
+                        {appRec&&<button onClick={()=>setSideRecipeId(sideRecipeId===row.recipeId?null:row.recipeId)}
+                          style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,padding:'2px 6px',borderRadius:10,border:'1px solid var(--sage-light)',background:sideRecipeId===row.recipeId?'var(--sage-light)':'transparent',color:'var(--sage-dark)',cursor:'pointer',fontFamily:'inherit'}}>
+                          📖 Recipe
+                        </button>}
+                        {row.recimeLink&&<a href={row.recimeLink}target="_blank"rel="noreferrer"
+                          style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,padding:'2px 6px',borderRadius:10,border:'1px solid #d0d0d0',color:'#555',textDecoration:'none'}}>
+                          🔗 Recime
+                        </a>}
+                        {row.igLink&&<a href={row.igLink}target="_blank"rel="noreferrer"
+                          style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,padding:'2px 6px',borderRadius:10,border:'1px solid #f0a0c0',background:'#fff5f9',color:'#c2185b',textDecoration:'none'}}>
+                          📸 IG
+                        </a>}
+                      </div>
+                    </div>
                   </div>
                 </td>
                 {plan.days.map(day=>{
                   const cell=row.cells?.[day]||{};
                   const isEditing=editingCell?.rowId===row.id&&editingCell?.day===day;
-                  return<td key={day}style={{...tdStyle,verticalAlign:'top',padding:0}}>
+                  const extra=isExtraCol(day);
+                  return<td key={day}style={{...tdStyle,verticalAlign:'top',padding:0,background:extra?(isDragOver?'#ece8ff':extraBg):undefined,borderLeft:extra?'2px solid #c8bef0':'none'}}>
                     {isEditing
-                      ?<textarea defaultValue={cell.text||''} autoFocus
+                      ?<textarea defaultValue={cell.text||''}autoFocus
                           onBlur={e=>saveCell(row.id,day,e.target.value)}
                           onKeyDown={e=>e.key==='Escape'&&setEditingCell(null)}
-                          style={{width:'100%',height:'100%',minHeight:70,resize:'none',border:'2px solid var(--green)',borderRadius:4,padding:6,fontSize:12,background:'var(--bg)',boxSizing:'border-box'}}/>
+                          style={{width:'100%',height:'100%',minHeight:70,resize:'none',border:'2px solid var(--sage)',borderRadius:4,padding:6,fontSize:12,background:'white',boxSizing:'border-box'}}/>
                       :<div onClick={()=>setEditingCell({rowId:row.id,day})}style={{minHeight:60,padding:'6px 8px',cursor:'text',position:'relative'}}>
                         {cell.text
                           ?<span style={{fontSize:12,whiteSpace:'pre-wrap',textDecoration:cell.done?'line-through':'none',color:cell.done?'var(--muted)':'inherit'}}>{cell.text}</span>
-                          :<span style={{color:'var(--border)',fontSize:18,lineHeight:'60px'}}>+</span>}
+                          :<span style={{color:'#ddd',fontSize:18,lineHeight:'60px'}}>+</span>}
                         {cell.text&&<button
                           onClick={e=>{e.stopPropagation();dispatch({type:'COOK_PLAN_TOGGLE_DONE',planId:plan.id,rowId:row.id,day});}}
                           title={cell.done?'Mark undone':'Mark done'}
-                          style={{position:'absolute',top:4,right:4,background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0,lineHeight:1,color:cell.done?'var(--green)':'var(--muted)'}}>
-                          {cell.done?'✓':'○'}
+                          style={{position:'absolute',top:4,right:4,background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0,lineHeight:1,color:cell.done?'var(--sage)':'var(--muted)'}}>
+                          {cell.done?'✅':'○'}
                         </button>}
                       </div>}
                   </td>;
                 })}
-                <td style={{...tdStyle,verticalAlign:'top',width:36}}>
-                  {deleting===row.id&&<div style={{position:'absolute',zIndex:10,background:'white',border:'1px solid var(--border)',borderRadius:8,padding:8,boxShadow:'0 2px 12px rgba(0,0,0,0.15)',whiteSpace:'nowrap',fontSize:12}}>
-                    Remove?<br/>
-                    <button style={{...arrowBtn,color:'var(--danger,#c0392b)',marginTop:4}}onClick={()=>{dispatch({type:'COOK_PLAN_DEL_ROW',planId:plan.id,rowId:row.id});setDeleting(null);}}>Yes</button>
-                    <button style={{...arrowBtn,marginLeft:4}}onClick={()=>setDeleting(null)}>No</button>
+                <td style={{...tdStyle,width:44,verticalAlign:'middle',textAlign:'center',padding:0,position:'relative'}}>
+                  <button onClick={()=>setDeleting(deleting===row.id?null:row.id)}
+                    title="Remove dish"
+                    style={{background:'none',border:'none',cursor:'pointer',fontSize:15,padding:'4px 8px',lineHeight:1,color:'var(--muted)',opacity:.6,transition:'opacity .15s'}}
+                    onMouseEnter={e=>e.currentTarget.style.opacity='1'}
+                    onMouseLeave={e=>e.currentTarget.style.opacity='.6'}>🗑</button>
+                  {deleting===row.id&&<div style={{position:'absolute',right:0,top:'100%',zIndex:20,background:'white',border:'1px solid var(--border)',borderRadius:8,padding:'8px 10px',boxShadow:'0 4px 16px rgba(0,0,0,0.15)',whiteSpace:'nowrap',fontSize:12,textAlign:'left'}}>
+                    Remove <strong>{row.name}</strong>?<br/>
+                    <div style={{display:'flex',gap:6,marginTop:6}}>
+                      <button style={{...arrowBtn,color:'#c0392b',borderColor:'#c0392b'}}onClick={()=>{dispatch({type:'COOK_PLAN_DEL_ROW',planId:plan.id,rowId:row.id});setDeleting(null);}}>Yes, remove</button>
+                      <button style={arrowBtn}onClick={()=>setDeleting(null)}>Cancel</button>
+                    </div>
                   </div>}
                 </td>
               </tr>;
@@ -2071,38 +2116,52 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
         </div>
       </div>
       {/* Side panel - recipe detail */}
-      {sideRecipe&&!isMobile&&<div style={{width:300,flexShrink:0,borderLeft:'1px solid var(--border)',overflow:'auto',padding:16,background:'var(--bg)'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <span style={{fontWeight:700,fontSize:15}}>{sideRecipe.name}</span>
-          <button className="mclose"onClick={()=>setSideRecipeId(null)} style={{fontSize:18}}>×</button>
+      {sideRecipe&&!isMobile&&<div style={{width:300,flexShrink:0,borderLeft:'2px solid var(--border)',overflow:'auto',background:'#fafaf8'}}>
+        <div style={{position:'sticky',top:0,background:'#fafaf8',borderBottom:'1px solid var(--border)',padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',zIndex:2}}>
+          <span style={{fontWeight:700,fontSize:14,lineHeight:1.3}}>{sideRecipe.name}</span>
+          <button className="mclose"onClick={()=>setSideRecipeId(null)}style={{fontSize:18,flexShrink:0}}>×</button>
         </div>
-        {sideRecipe.imageUrl&&<img src={sideRecipe.imageUrl}alt=""style={{width:'100%',borderRadius:8,marginBottom:10,objectFit:'cover',maxHeight:160}}onError={imgOnError}/>}
-        {(sideRecipe.ingredientRefs||[]).length>0&&<div style={{marginBottom:12}}>
-          <div style={{fontWeight:600,fontSize:12,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Ingredients</div>
-          {sideRecipe.ingredientRefs.map(ref=>{
-            const ing=ings.find(i=>i.id===ref.id);
-            return<div key={ref.id}style={{fontSize:13,padding:'3px 0',borderBottom:'1px solid var(--border)'}}>
-              {ref.quantity&&<span style={{color:'var(--muted)',marginRight:4}}>{ref.quantity}</span>}
-              {ing?.name||'?'}
-            </div>;
-          })}
-        </div>}
-        {(sideRecipe.instructions||[]).length>0&&<div>
-          <div style={{fontWeight:600,fontSize:12,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Instructions</div>
-          {sideRecipe.instructions.map((step,i)=><div key={i}style={{fontSize:13,padding:'4px 0',borderBottom:'1px solid var(--border)'}}>
-            <span style={{fontWeight:600,color:'var(--green)',marginRight:6}}>{i+1}</span>{step}
-          </div>)}
-        </div>}
-        {sideRecipe.url&&<a href={sideRecipe.url}target="_blank"rel="noreferrer"style={{display:'block',marginTop:12,fontSize:12,color:'var(--muted)'}}>View source →</a>}
+        <div style={{padding:'0 14px 20px'}}>
+          {sideRecipe.imageUrl&&<img src={sideRecipe.imageUrl}alt=""style={{width:'100%',borderRadius:8,margin:'12px 0 10px',objectFit:'cover',maxHeight:150,display:'block'}}onError={imgOnError}/>}
+          {(sideRecipe.ingredientRefs||[]).length>0&&<div style={{marginTop:14}}>
+            <div style={{fontWeight:700,fontSize:11,color:'var(--sage-dark)',textTransform:'uppercase',letterSpacing:.8,marginBottom:8,paddingBottom:4,borderBottom:'2px solid var(--sage-light)'}}>🧺 Ingredients</div>
+            {sideRecipe.ingredientRefs.map(ref=>{
+              const ing=ings.find(i=>i.id===ref.id);
+              return<div key={ref.id}style={{fontSize:13,padding:'5px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:6,alignItems:'baseline'}}>
+                {ref.quantity&&<span style={{color:'var(--muted)',fontSize:11,minWidth:60,flexShrink:0}}>{ref.quantity}</span>}
+                <span style={{fontWeight:500}}>{ing?.name||'?'}</span>
+              </div>;
+            })}
+          </div>}
+          {(sideRecipe.instructions||[]).length>0&&<div style={{marginTop:18}}>
+            <div style={{fontWeight:700,fontSize:11,color:'#7b5ea7',textTransform:'uppercase',letterSpacing:.8,marginBottom:8,paddingBottom:4,borderBottom:'2px solid #d0c0f0'}}>📋 Instructions</div>
+            {sideRecipe.instructions.map((step,i)=><div key={i}style={{fontSize:13,padding:'6px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:8,alignItems:'flex-start'}}>
+              <span style={{fontWeight:700,color:'#7b5ea7',fontSize:12,minWidth:20,flexShrink:0,marginTop:1}}>{i+1}</span>
+              <span style={{lineHeight:1.5}}>{step}</span>
+            </div>)}
+          </div>}
+          {sideRecipe.url&&<a href={sideRecipe.url}target="_blank"rel="noreferrer"style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:14,fontSize:12,color:'var(--sage-dark)',textDecoration:'none',padding:'5px 10px',borderRadius:8,border:'1px solid var(--sage-light)',background:'white'}}>
+            🔗 View full recipe →
+          </a>}
+        </div>
       </div>}
       {/* Mobile side panel — slides up as a sheet */}
       {sideRecipe&&isMobile&&<div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,0.35)'}}onClick={()=>setSideRecipeId(null)}>
-        <div style={{position:'absolute',bottom:0,left:0,right:0,maxHeight:'70vh',background:'var(--bg)',borderRadius:'16px 16px 0 0',overflow:'auto',padding:16}}onClick={e=>e.stopPropagation()}>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}>
-            <span style={{fontWeight:700}}>{sideRecipe.name}</span>
+        <div style={{position:'absolute',bottom:0,left:0,right:0,maxHeight:'75vh',background:'white',borderRadius:'16px 16px 0 0',overflow:'auto'}}onClick={e=>e.stopPropagation()}>
+          <div style={{position:'sticky',top:0,background:'white',padding:'12px 16px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontWeight:700,fontSize:15}}>{sideRecipe.name}</span>
             <button className="mclose"onClick={()=>setSideRecipeId(null)}>×</button>
           </div>
-          {(sideRecipe.ingredientRefs||[]).map(ref=>{const ing=ings.find(i=>i.id===ref.id);return<div key={ref.id}style={{fontSize:13,padding:'3px 0',borderBottom:'1px solid var(--border)'}}>{ref.quantity&&<span style={{color:'var(--muted)',marginRight:4}}>{ref.quantity}</span>}{ing?.name||'?'}</div>;})}
+          <div style={{padding:'0 16px 20px'}}>
+            {(sideRecipe.ingredientRefs||[]).length>0&&<div style={{marginTop:14}}>
+              <div style={{fontWeight:700,fontSize:11,color:'var(--sage-dark)',textTransform:'uppercase',letterSpacing:.8,marginBottom:8,paddingBottom:4,borderBottom:'2px solid var(--sage-light)'}}>🧺 Ingredients</div>
+              {sideRecipe.ingredientRefs.map(ref=>{const ing=ings.find(i=>i.id===ref.id);return<div key={ref.id}style={{fontSize:13,padding:'5px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:6}}>{ref.quantity&&<span style={{color:'var(--muted)',fontSize:11,minWidth:55}}>{ref.quantity}</span>}<span style={{fontWeight:500}}>{ing?.name||'?'}</span></div>;})}
+            </div>}
+            {(sideRecipe.instructions||[]).length>0&&<div style={{marginTop:18}}>
+              <div style={{fontWeight:700,fontSize:11,color:'#7b5ea7',textTransform:'uppercase',letterSpacing:.8,marginBottom:8,paddingBottom:4,borderBottom:'2px solid #d0c0f0'}}>📋 Instructions</div>
+              {sideRecipe.instructions.map((step,i)=><div key={i}style={{fontSize:13,padding:'6px 0',borderBottom:'1px solid #f0ece4',display:'flex',gap:8}}><span style={{fontWeight:700,color:'#7b5ea7',minWidth:20}}>{i+1}</span><span>{step}</span></div>)}
+            </div>}
+          </div>
         </div>
       </div>}
     </div>
