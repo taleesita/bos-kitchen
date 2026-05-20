@@ -2097,26 +2097,28 @@ function CookPlanEditor({plan,state,dispatch,onBack,showToast}){
                   onDragOver={e=>{e.preventDefault();setDragOverIdx(ri);}}
                   onDrop={e=>handleDrop(e,ri)}
                   style={{opacity:isDragging?0.4:1,cursor:'grab'}}>
-                  <td colSpan={plan.days.length+2}
-                    style={{padding:'16px 10px 4px',borderBottom:'2px solid var(--sage-light)',background:isDragOver?'#edf7ee':'transparent',outline:isDragOver?'2px solid var(--sage)':'none'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:6}}>
-                      <span style={{color:'var(--muted)',fontSize:14,cursor:'grab',flexShrink:0}}>⠿</span>
+                  <td colSpan={plan.days.length+1}
+                    style={{padding:'18px 12px 6px',borderBottom:'3px solid var(--sage)',background:isDragOver?'#dff0e4':'#eef6ef',outline:isDragOver?'2px solid var(--sage)':'none'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{color:'var(--sage)',fontSize:14,cursor:'grab',flexShrink:0,opacity:.7}}>⠿</span>
                       {editingSectionId===row.id
                         ?<input autoFocus value={sectionName}
                             onChange={e=>setSectionName(e.target.value)}
                             onBlur={()=>saveSectionName(row.id,sectionName)}
                             onKeyDown={e=>{if(e.key==='Enter')saveSectionName(row.id,sectionName);if(e.key==='Escape'){setEditingSectionId(null);}}}
-                            style={{flex:1,border:'1.5px solid var(--sage)',borderRadius:6,padding:'3px 8px',fontSize:12,fontWeight:700,fontFamily:'inherit',letterSpacing:.5,textTransform:'uppercase',color:'var(--sage-dark)',background:'white'}}/>
+                            style={{flex:1,border:'2px solid var(--sage)',borderRadius:6,padding:'3px 10px',fontSize:15,fontWeight:800,fontFamily:'inherit',letterSpacing:.8,textTransform:'uppercase',color:'var(--sage-dark)',background:'white'}}/>
                         :<span onClick={()=>{setEditingSectionId(row.id);setSectionName(row.name);}}
-                            style={{flex:1,fontWeight:800,fontSize:11,color:'var(--sage-dark)',textTransform:'uppercase',letterSpacing:1,cursor:'text'}}>
+                            style={{flex:1,fontWeight:900,fontSize:15,color:'var(--sage-dark)',textTransform:'uppercase',letterSpacing:1.4,cursor:'text',lineHeight:1}}>
                           {row.name||'Untitled Section'}
                         </span>}
-                      <button onClick={()=>dispatch({type:'COOK_PLAN_DEL_ROW',planId:plan.id,rowId:row.id})}
-                        title="Remove section"
-                        style={{background:'none',border:'none',cursor:'pointer',fontSize:13,padding:'2px 6px',color:'var(--muted)',opacity:.5,transition:'opacity .15s',marginLeft:'auto'}}
-                        onMouseEnter={e=>e.currentTarget.style.opacity='1'}
-                        onMouseLeave={e=>e.currentTarget.style.opacity='.5'}>🗑</button>
                     </div>
+                  </td>
+                  <td style={{width:44,background:isDragOver?'#dff0e4':'#eef6ef',borderBottom:'3px solid var(--sage)',verticalAlign:'middle',textAlign:'center',padding:0}}>
+                    <button onClick={()=>dispatch({type:'COOK_PLAN_DEL_ROW',planId:plan.id,rowId:row.id})}
+                      title="Remove section"
+                      style={{background:'none',border:'none',cursor:'pointer',fontSize:15,padding:'4px 8px',lineHeight:1,color:'var(--muted)',opacity:.5,transition:'opacity .15s'}}
+                      onMouseEnter={e=>e.currentTarget.style.opacity='1'}
+                      onMouseLeave={e=>e.currentTarget.style.opacity='.5'}>🗑</button>
                   </td>
                 </tr>;
               }
