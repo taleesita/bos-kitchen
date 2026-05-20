@@ -683,6 +683,18 @@ function reducer(state,action){
       });
       return{...state,cookPlans:{...state.cookPlans,[action.planId]:{...plan,rows}}};
     }
+    case'COOK_PLAN_TOGGLE_LINE':{
+      const plan=state.cookPlans?.[action.planId];if(!plan)return state;
+      const rows=(plan.rows||[]).map(r=>{
+        if(r.id!==action.rowId)return r;
+        const cell=r.cells?.[action.day]||{};
+        const dl=[...(cell.doneLines||[])];
+        const pos=dl.indexOf(action.lineIdx);
+        if(pos>=0)dl.splice(pos,1);else dl.push(action.lineIdx);
+        return{...r,cells:{...(r.cells||{}),[action.day]:{...cell,doneLines:dl}}};
+      });
+      return{...state,cookPlans:{...state.cookPlans,[action.planId]:{...plan,rows}}};
+    }
     case'COOK_PLAN_MOVE_ROW':{
       const plan=state.cookPlans?.[action.planId];if(!plan)return state;
       const rows=[...(plan.rows||[])];
@@ -2079,17 +2091,23 @@ function CookPlanEditor({plan,state,dispatch,onBack}){
                       ?<textarea defaultValue={cell.text||''}autoFocus
                           onBlur={e=>saveCell(row.id,day,e.target.value)}
                           onKeyDown={e=>e.key==='Escape'&&setEditingCell(null)}
-                          style={{width:'100%',height:'100%',minHeight:70,resize:'none',border:'2px solid var(--sage)',borderRadius:4,padding:6,fontSize:12,background:'white',boxSizing:'border-box'}}/>
-                      :<div onClick={()=>setEditingCell({rowId:row.id,day})}style={{minHeight:60,padding:'6px 8px',cursor:'text',position:'relative'}}>
-                        {cell.text
-                          ?<span style={{fontSize:12,whiteSpace:'pre-wrap',textDecoration:cell.done?'line-through':'none',color:cell.done?'var(--muted)':'inherit'}}>{cell.text}</span>
-                          :<span style={{color:'#ddd',fontSize:18,lineHeight:'60px'}}>+</span>}
-                        {cell.text&&<button
-                          onClick={e=>{e.stopPropagation();dispatch({type:'COOK_PLAN_TOGGLE_DONE',planId:plan.id,rowId:row.id,day});}}
-                          title={cell.done?'Mark undone':'Mark done'}
-                          style={{position:'absolute',top:4,right:4,background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0,lineHeight:1,color:cell.done?'var(--sage)':'var(--muted)'}}>
-                          {cell.done?'✅':'○'}
-                        </button>}
+                          style={{width:'100%',height:'100%',minHeight:80,resize:'none',border:'2px solid var(--sage)',borderRadius:4,padding:'6px 8px',fontSize:12,background:'white',boxSizing:'border-box',lineHeight:1.6}}
+                          placeholder="One item per line…"/>
+                      :<div style={{minHeight:60,padding:'4px 6px',cursor:'text',position:'relative'}}
+                          onClick={e=>{if(e.target===e.currentTarget||e.target.tagName==='DIV')setEditingCell({rowId:row.id,day});}}>
+                        {(cell.text||'').trim()
+                          ?(cell.text||'').split('\n').filter(l=>l.trim()).map((line,li)=>{
+                              const done=(cell.doneLines||[]).includes(li);
+                              return<div key={li}
+                                onClick={e=>{e.stopPropagation();dispatch({type:'COOK_PLAN_TOGGLE_LINE',planId:plan.id,rowId:row.id,day,lineIdx:li});}}
+                                style={{display:'flex',alignItems:'flex-start',gap:5,padding:'3px 2px',cursor:'pointer',userSelect:'none',borderRadius:4,transition:'background .1s'}}
+                                onMouseEnter={e=>e.currentTarget.style.background='rgba(0,0,0,0.04)'}
+                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                <span style={{fontSize:13,lineHeight:'17px',flexShrink:0,color:done?'var(--sage)':'#bbb',marginTop:1}}>{done?'✓':'•'}</span>
+                                <span style={{fontSize:12,lineHeight:'17px',textDecoration:done?'line-through':'none',color:done?'var(--muted)':'inherit'}}>{line}</span>
+                              </div>;
+                            })
+                          :<span onClick={()=>setEditingCell({rowId:row.id,day})}style={{color:'#ccc',fontSize:20,lineHeight:'60px',display:'block',textAlign:'center',cursor:'text'}}>+</span>}
                       </div>}
                   </td>;
                 })}
