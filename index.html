@@ -1874,13 +1874,7 @@ function CookPlanOverlay({state,dispatch,onClose}){
   const[extraInput,setExtraInput]=useState('');
   const plans=Object.values(state.cookPlans||{}).sort((a,b)=>b.createdAt-a.createdAt);
 
-  if(planId){
-    const plan=state.cookPlans?.[planId];
-    if(!plan){setPlanId(null);return null;}
-    return<CookPlanEditor plan={plan} state={state} dispatch={dispatch} onBack={()=>setPlanId(null)}/>;
-  }
-
-  // Build day list from date range
+  // All hooks must come before any conditional return
   const dateDays=useMemo(()=>{
     if(!startDate||!endDate)return[];
     const out=[];
@@ -1894,6 +1888,13 @@ function CookPlanOverlay({state,dispatch,onClose}){
     }
     return out;
   },[startDate,endDate]);
+
+  // Early return AFTER all hooks
+  if(planId){
+    const plan=state.cookPlans?.[planId];
+    if(!plan){setPlanId(null);return null;}
+    return<CookPlanEditor plan={plan} state={state} dispatch={dispatch} onBack={()=>setPlanId(null)}/>;
+  }
 
   function resetCreating(){setCreating(false);setNewName('');setStartDate('');setEndDate('');setLabels({});setExtraCols([]);setExtraInput('');}
 
