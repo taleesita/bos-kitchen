@@ -549,6 +549,13 @@ function reducer(state,action){
       day[action.slot]=slot;days[action.day]=day;
       return{...state,mealPlan:{...mp,days}};
     }
+    case'MEAL_TOGGLE_COOKED':{
+      const mp=state.mealPlan||{};
+      const cooked={...(mp.cooked||{})};
+      const k=action.key;
+      if(cooked[k])delete cooked[k]; else cooked[k]=true;
+      return{...state,mealPlan:{...mp,cooked}};
+    }
     case'MEAL_RM_REC':{
       const days={...state.mealPlan.days};
       const day={...(days[action.day]||{})};
@@ -586,7 +593,7 @@ function reducer(state,action){
     case'NOA_ROSTER_RM':return{...state,noaRoster:(state.noaRoster||[]).filter(id=>id!==action.recId)};
     case'NEW_WEEK':{
       const emptyDays=Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}]));
-      return{...state,mealPlan:{weekStart:getWeekStart(),days:emptyDays,misc:[],noa:[]},shopping:{needed:[],pickedUp:[]}};
+      return{...state,mealPlan:{weekStart:getWeekStart(),days:emptyDays,misc:[],noa:[],cooked:{}},shopping:{needed:[],pickedUp:[]}};
     }
     case'TOGGLE_NEED':{
       const needed=state.shopping.needed.includes(action.id)?state.shopping.needed.filter(i=>i!==action.id):[...state.shopping.needed,action.id];
@@ -1926,7 +1933,9 @@ function CookPlanOverlay({state,dispatch,onClose,showToast}){
   // Early return AFTER all hooks
   if(planId){
     const plan=state.cookPlans?.[planId];
-    if(!plan){closePlan();return null;}
+    // If cookPlans not loaded yet (undefined), show loading rather than redirecting
+    if(!plan&&state.cookPlans!==undefined){closePlan();return null;}
+    if(!plan)return<div className="overlay"><div className="modal"style={{textAlign:'center',padding:40,color:'var(--muted)'}}>Loading…</div></div>;
     return<CookPlanEditor plan={plan} state={state} dispatch={dispatch} showToast={showToast} onBack={closePlan}/>;
   }
 
@@ -2502,8 +2511,15 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
                   const igUrl=planRec&&(planRec.sourceUrl?.includes('instagram')?planRec.sourceUrl:planRec.url?.includes('instagram')?planRec.url:null);
                   const recimeUrl=planRec&&planRec.url?.includes('recime')?planRec.url:null;
                   const siteUrl=planRec&&planRec.sourceUrl&&!planRec.sourceUrl.includes('instagram')&&!planRec.sourceUrl.includes('drive.google')?planRec.sourceUrl:null;
-                  return<div key={item}className={`cal-chip${item.startsWith('text:')?' text-chip':''}`}>
-                  <span className="name"title={itemLabel(item)}style={item.startsWith('text:')?{}:{cursor:'pointer'}}onClick={()=>{if(!item.startsWith('text:')){if(planRec)setViewing(planRec)}}}>{itemLabel(item)}</span>
+                  const cookedKey=`${dkey}_${slot}_${item}`;
+                  const isCooked=!!(state.mealPlan?.cooked||{})[cookedKey];
+                  return<div key={item}className={`cal-chip${item.startsWith('text:')?' text-chip':''}`}style={isCooked?{background:'#e8f5e9',borderColor:'#a5d6a7'}:{}}>
+                  <button onClick={e=>{e.stopPropagation();dispatch({type:'MEAL_TOGGLE_COOKED',key:cookedKey});}}
+                    style={{background:'none',border:'none',cursor:'pointer',padding:'0 2px',fontSize:12,lineHeight:1,
+                      color:isCooked?'#388e3c':'var(--border)',flexShrink:0}}title={isCooked?'Mark undone':'Mark done'}>
+                    {isCooked?'✓':'○'}
+                  </button>
+                  <span className="name"title={itemLabel(item)}style={item.startsWith('text:')?{}:{cursor:'pointer',textDecoration:isCooked?'line-through':'none',color:isCooked?'var(--muted)':'inherit'}}onClick={()=>{if(!item.startsWith('text:')){if(planRec)setViewing(planRec)}}}>{itemLabel(item)}</span>
                   {igUrl&&<a href={igUrl}target="_blank"onClick={e=>e.stopPropagation()}style={{fontSize:10,textDecoration:'none',color:'#c13584',flexShrink:0,lineHeight:1,padding:'0 1px'}}title="Open Instagram">IG</a>}
                   {recimeUrl&&<a href={recimeUrl}target="_blank"onClick={e=>e.stopPropagation()}style={{fontSize:10,textDecoration:'none',color:'var(--sage-dark)',flexShrink:0,lineHeight:1,padding:'0 1px'}}title="Open in Recime">R↗</a>}
                   {siteUrl&&!igUrl&&!recimeUrl&&<a href={siteUrl}target="_blank"onClick={e=>e.stopPropagation()}style={{fontSize:10,textDecoration:'none',color:'var(--sage-dark)',flexShrink:0,lineHeight:1,padding:'0 1px'}}title={sourceLinkLabel(siteUrl)}>↗</a>}
