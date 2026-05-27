@@ -559,10 +559,37 @@ function decodeSync(code,cur){
       return ref;
     });
   });
+  // Systemic fix: resolve unknown ingredient refs using name-based matching to SEED,
+  // then positional fallback. Handles Recime imports and any stale Firebase recOv IDs.
+  const knownIngIds=new Set([...(window.SEED.ingredients||[]).map(i=>i.id),...(ud.customIngs||[]).map(i=>i.id)]);
+  const seedIngByName={};(window.SEED.ingredients||[]).forEach(i=>{seedIngByName[i.name.toLowerCase().trim()]=i.id;});
+  const customIngById={};(ud.customIngs||[]).forEach(i=>{customIngById[i.id]=i.name;});
+  function resolveRefs(refs,seedRefsFallback){
+    const seedNonSect=(seedRefsFallback||[]).filter(r=>!r.section);
+    let nsi=0;
+    return(refs||[]).map(ref=>{
+      if(ref.section)return ref;
+      const idx=nsi++;
+      if(knownIngIds.has(ref.id))return ref;
+      // 1) Name match: look up the custom ingredient's name and find it in SEED
+      const cname=customIngById[ref.id];
+      if(cname){const sid=seedIngByName[cname.toLowerCase().trim()];if(sid)return{...ref,id:sid};}
+      // 2) Positional fallback: use SEED's ref at same position
+      const sr=seedNonSect[idx];
+      if(sr&&knownIngIds.has(sr.id))return{...sr,quantity:ref.quantity||sr.quantity};
+      return null;
+    }).filter(Boolean);
+  }
+  seedRecs.forEach(rec=>{
+    const seedRec=window.SEED.recipes.find(s=>s.id===rec.id);
+    rec.ingredientRefs=resolveRefs(rec.ingredientRefs,seedRec?.ingredientRefs);
+  });
   function mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
   const myRecs=(cur.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id));
   const myIngs=(cur.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id));
-  return{recipes:[...seedRecs,...mergeById(myRecs,ud.customRecipes||[])],
+  // Also resolve unknown refs in custom (non-SEED) recipes imported from Recime etc.
+  const customRecs=(ud.customRecipes||[]).map(rec=>({...rec,ingredientRefs:resolveRefs(rec.ingredientRefs,null)}));
+  return{recipes:[...seedRecs,...mergeById(myRecs,customRecs)],
     ingredients:[...seedIngs,...mergeById(myIngs,ud.customIngs||[])],
     mealPlan:ud.mealPlan,shopping:ud.shopping,holidays:ud.holidays||{},
     noaRoster:Array.isArray(ud.noaRoster)?ud.noaRoster:[],
