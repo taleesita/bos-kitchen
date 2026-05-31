@@ -4888,6 +4888,94 @@ function App({user,onSignOut}){
               const ov=effectiveIngOv.find(o=>o.id===i.id);return ov?{...i,name:ov.name||i.name,store:ov.store}:i;
             });
             const seedRecs=(window.SEED.recipes||[]).map(r=>{const ov=effectiveRecOv.find(o=>o.id===r.id);return ov?{...r,...ov}:r;});
+            // ── Apply ingredient migrations (same as in decodeSync) ──────────────
+            const _ING_REMAP={
+              '64b56311-cff6-4ae9-b519-1754ad253877':'71f416c0-a50c-42fb-aa50-9573d9bb0aa7',
+              '9ed68b82-3ab2-4387-9e65-05c9d1990c05':'71f416c0-a50c-42fb-aa50-9573d9bb0aa7',
+              'bfcbde88-e311-46e2-a47e-101a380a3236':'f459ef37-9383-4c34-b5f9-8ddf143365a5',
+              '4394822e-a4b5-4bab-b4b3-0da2ebad9a04':'63cc6329-5d14-4e65-b574-e58434f04434',
+              '51b40de1-a891-4dcf-8976-6de905dc3899':'a1391227-d99b-47b4-bd77-da721ee5cff3',
+              '2833ea84-664b-4083-adbc-7612b84886ff':'a1391227-d99b-47b4-bd77-da721ee5cff3',
+              '6776c44c-577e-457c-9c8f-5c28b9c687fd':'a1391227-d99b-47b4-bd77-da721ee5cff3',
+              '914a5abc-4426-4749-b2d0-5d38002efcc5':'68a00582-dc7d-46f0-9e4f-3d4fc1b3b3ab',
+              '8ffabf4c-65ea-4696-b3eb-366441f5945b':'50c6f8be-0095-4174-bce2-fe07a1ebd150',
+              '3e0ab8af-a05c-49f6-b856-4b05fb131b73':'40345506-2734-417c-ab89-9c4add1e1d61',
+              '8201cd2a-76e4-4dd6-9f63-ca6d0b2a8b12':'40345506-2734-417c-ab89-9c4add1e1d61',
+              'e926062c-e68f-405f-b202-bac6073b85c9':'bca1d4af-341c-4609-b725-a4fb8c829dca',
+              '31d2ab3f-9957-4b60-a6c5-1bb81774da2b':'b2a9e14d-267e-46b8-81b0-d1c03c5bc401',
+              'aebc10e5-76aa-4700-87a1-f272b4ce4edd':'4a0c5af3-1af1-45cd-9a1c-7f09cb329cb5',
+              'ad1e35fe-ce25-4a5c-bc16-c3f12f942362':'4a0c5af3-1af1-45cd-9a1c-7f09cb329cb5',
+              'eeb25d5c-eb18-425b-98f1-bb0670cbcb02':'4dbcf0e9-f4d9-4192-be19-db659ee25036',
+              '81d41caa-4b19-458c-b271-f2c0c78c28c4':'57945da8-9876-46a9-9d45-d9a05f616134',
+              'cbabc32d-4f4c-4393-a021-6a6105c3c552':'9e1e485b-2f3f-41c8-8e4d-a068b6a581e1',
+              '445d73fc-c253-4108-adb2-c6033263eb6e':'9e1e485b-2f3f-41c8-8e4d-a068b6a581e1',
+              'b0f80083-1641-4341-a992-5eeb48d4c856':'e254db12-b0d8-4955-87a4-7965cdc70544',
+              '5c4a90c2-afbe-4b0f-b22f-17bce4e0f8ab':'428a44f0-8238-4146-80b5-d2958993406b',
+              '0357de35-9ab4-463e-9877-ef3d29af4382':'noa-i-06',
+              '754fae48-75b3-4213-86de-fa2dfe6aa1eb':'13ff6479-718b-4225-9b7a-539ac934e275',
+              '62fdd81a-33e5-4294-b0c4-0587b6835f98':'8425dd77-80b8-4d80-b9d9-a8a90dc24c35',
+              'cac41bfa-70a1-492e-8b34-34a0daaf307b':'fb5cd8fe-2951-4c04-ba26-dbdf05e71f95',
+              '2ad66a62-1764-4878-a14a-861764fc9697':'924bbe86-758f-4274-8f68-30ff65b8db61',
+              '574b6df1-47c6-4a87-8bdc-29627b051c1f':'ab0f06fb-75ce-4fcf-880a-82357c6a5a07',
+              'noa-i-01':'2551afd5-92fe-4217-bb53-e5f1c9ba5f1c',
+              '2e1925e5-ff63-4577-b36c-079f992e2ccb':'342fdd70-e8b0-4d1a-add6-dff1dfe46d19',
+              '4f4980e9-7fa5-4f48-b1ec-82d94169e76a':'21bd07e2-3b59-4321-9ffc-7b8225b43c69',
+              '79462ec2-cec0-48fa-b826-e05b2e61acf8':'21bd07e2-3b59-4321-9ffc-7b8225b43c69',
+              '8994a83f-f83e-4f23-8de0-4f141500f8ba':'642740d9-a78f-48a3-ac27-3d2ec51bddf6',
+              'f65b9f55-19a1-42ed-9ce4-a11a26bfb4db':'c3a7e935-14a2-45b8-80ee-b9e891305476',
+              '8b724d16-5fe6-43e4-9425-1f75dccb1b28':'41631247-03bf-4357-aba5-9879489b4acd',
+              '3d974732-52d2-441f-a414-4d8ac0bf10d3':'afbbfd39-1998-417f-8286-6bf2dd1a4837',
+              '986d5016-520d-4aba-bdee-888467ce82da':'532c7494-c0b3-463b-b070-dc8aba505db5',
+              '592b1b54-c7ae-48b1-9f4a-bf38a97f3cfe':'c894a38d-43be-4b1f-8eab-42dc52708edd',
+              '8dd182fe-1664-44d9-8c5c-192394a73ad9':'342fdd70-e8b0-4d1a-add6-dff1dfe46d19',
+              'c2f99545-1744-4467-b646-6a5c2e1b5e8e':'924bbe86-758f-4274-8f68-30ff65b8db61',
+              '786a5de7-3da1-45bc-8f4e-871c6a4d2e3d':'85ba9863-5060-4053-b1fc-4a2da2118186',
+              'a5a06a15-c9ad-4d8c-856f-56aff9ca1a2d':'ed3a03c1-bb1b-4bb2-9231-5a3254f94331',
+            };
+            const _EXPAND_MAP={
+              'a9d1758b-3800-42cc-998d-6a7bfea30ea7':[{id:'4a0c5af3-1af1-45cd-9a1c-7f09cb329cb5',quantity:'to taste'},{id:'9e1e485b-2f3f-41c8-8e4d-a068b6a581e1',quantity:'to taste'},{id:'7d58a2ab-921f-4662-9a37-04a047a3956e',quantity:'to taste'}],
+              'c65491a0-5b02-4fce-9383-3dbd9aae85c8':[{id:'4a0c5af3-1af1-45cd-9a1c-7f09cb329cb5',quantity:'to taste'},{id:'9e1e485b-2f3f-41c8-8e4d-a068b6a581e1',quantity:'to taste'}],
+              'dad0505d-54cc-41c8-baf5-5c9757452554':[{id:'4c091bc5-7441-478d-97fc-9f8ad5af51da',quantity:''},{id:'ff93b362-e1ef-440d-b769-c3ecb76ccd73',quantity:''},{id:'be228b2f-326d-45ec-8737-f40786eb85ff',quantity:''}],
+            };
+            // Track whether any recipe needed migration so we can write back to Firebase
+            let _fbMigrationNeeded=false;
+            seedRecs.forEach(rec=>{
+              const origIds=JSON.stringify((rec.ingredientRefs||[]).map(r=>r.id));
+              const newRefs=[];
+              (rec.ingredientRefs||[]).forEach(ref=>{
+                if(ref.section){newRefs.push(ref);return;}
+                if(_EXPAND_MAP[ref.id]){_EXPAND_MAP[ref.id].forEach(er=>newRefs.push(er));return;}
+                const newId=_ING_REMAP[ref.id];
+                newRefs.push(newId?{...ref,id:newId}:ref);
+              });
+              rec.ingredientRefs=newRefs;
+              if(JSON.stringify(newRefs.map(r=>r.id))!==origIds)_fbMigrationNeeded=true;
+            });
+            // If migrations changed any data, write the corrected recOv back to Firebase
+            // so old IDs don't keep reappearing on every load
+            if(_fbMigrationNeeded&&db){
+              setTimeout(()=>{
+                try{
+                  // Build corrected recOv: only save fields that differ from SEED
+                  const correctedRecOv=seedRecs.filter(r=>SEED_REC_IDS.has(r.id)).reduce((acc,r)=>{
+                    const s=(window.SEED.recipes||[]).find(x=>x.id===r.id);if(!s)return acc;
+                    const ov={id:r.id};let changed=false;
+                    const ovEntry=(effectiveRecOv||[]).find(o=>o.id===r.id)||{};
+                    if(ovEntry.noaLabel!==undefined){ov.noaLabel=ovEntry.noaLabel;changed=true;}
+                    if(ovEntry.noaCategory!==undefined){ov.noaCategory=ovEntry.noaCategory;changed=true;}
+                    if(ovEntry.name!==undefined&&ovEntry.name!==s.name){ov.name=ovEntry.name;changed=true;}
+                    if(ovEntry.sourceUrl!==undefined){ov.sourceUrl=ovEntry.sourceUrl;changed=true;}
+                    const rRefs=JSON.stringify((r.ingredientRefs||[]).map(x=>x.id).sort());
+                    const sRefs=JSON.stringify((s.ingredientRefs||[]).map(x=>x.id).sort());
+                    if(rRefs!==sRefs){ov.ingredientRefs=r.ingredientRefs||[];changed=true;}
+                    if(changed)acc.push(ov);return acc;
+                  },[]);
+                  db.ref('kitchen/recOv').set(correctedRecOv.length?correctedRecOv:null);
+                  console.log('[migration] Wrote corrected recOv back to Firebase');
+                }catch(e){console.error('[migration] write-back failed:',e);}
+              },2000);
+            }
+            // ── End migrations ───────────────────────────────────────────────────
             function mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
             const safeShopping=ud.shopping||{needed:[],pickedUp:[]};
             const newState={
