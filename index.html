@@ -2800,7 +2800,17 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
       </div>
       {addingMisc&&<div style={{marginTop:8}}>
         <SearchDrop
-          items={(()=>{const miscSet=new Set((misc||[]).map(x=>x.toLowerCase()));return[...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).map(i=>({id:i.id,label:i.name,sub:i.store})).filter(i=>!miscSet.has(i.label.toLowerCase()));})()}
+          items={(()=>{
+            const miscSet=new Set((misc||[]).map(x=>x.toLowerCase()));
+            const normIng=s=>s.toLowerCase().trim().replace(/\s+/g,' ').replace(/chilli/g,'chili').replace(/yoghurt/g,'yogurt');
+            const seen=new Map();
+            [...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).forEach(i=>{
+              const norm=normIng(i.name);
+              if(!seen.has(norm)){seen.set(norm,{id:i.id,label:i.name,sub:i.store});}
+              else if(SEED_ING_IDS.has(i.id)&&!SEED_ING_IDS.has(seen.get(norm).id)){seen.set(norm,{id:i.id,label:i.name,sub:i.store});}
+            });
+            return[...seen.values()].filter(i=>!miscSet.has(i.label.toLowerCase()));
+          })()}
           onSelect={item=>{
             dispatch({type:'MISC_ADD',item:item.label});
             let miscIngId=item.id;
@@ -4975,12 +4985,37 @@ function App({user,onSignOut}){
                 }catch(e){console.error('[migration] write-back failed:',e);}
               },2000);
             }
+            // ── Deduplicate customIngs vs SEED (e.g. "Chili crisp" = SEED "chilli crisp") ──
+            // Normalise: lowercase, collapse spaces, treat chilli→chili, yoghurt→yogurt
+            function _normIng(s){return s.toLowerCase().trim().replace(/\s+/g,' ').replace(/chilli/g,'chili').replace(/yoghurt/g,'yogurt');}
+            const _seedNormMap={};(window.SEED.ingredients||[]).forEach(i=>{_seedNormMap[_normIng(i.name)]=i.id;});
+            const _customIngRemap={};
+            const _cleanCustomIngs=(ud.customIngs||[]).filter(ci=>{
+              const sid=_seedNormMap[_normIng(ci.name)];
+              if(sid){_customIngRemap[ci.id]=sid;_fbMigrationNeeded=true;return false;}
+              return true;
+            });
+            // Apply custom→SEED remap to any recipe refs
+            if(Object.keys(_customIngRemap).length>0){
+              seedRecs.forEach(rec=>{
+                const before=JSON.stringify((rec.ingredientRefs||[]).map(r=>r.id));
+                rec.ingredientRefs=(rec.ingredientRefs||[]).map(ref=>{
+                  if(ref.section)return ref;
+                  const sid=_customIngRemap[ref.id];return sid?{...ref,id:sid}:ref;
+                });
+                if(JSON.stringify(rec.ingredientRefs.map(r=>r.id))!==before)_fbMigrationNeeded=true;
+              });
+            }
+            // Also write back cleaned customIngs to Firebase if any were deduped
+            if(_fbMigrationNeeded&&Object.keys(_customIngRemap).length>0&&db){
+              setTimeout(()=>{try{db.ref('kitchen/customIngs').set(_cleanCustomIngs.length?_cleanCustomIngs:null);}catch(e){}},2500);
+            }
             // ── End migrations ───────────────────────────────────────────────────
             function mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
             const safeShopping=ud.shopping||{needed:[],pickedUp:[]};
             const newState={
               recipes:[...seedRecs,...mergeById([],ud.customRecipes||[])],
-              ingredients:[...seedIngs,...mergeById([],ud.customIngs||[])],
+              ingredients:[...seedIngs,...mergeById([],_cleanCustomIngs)],
               mealPlan:safeMp,
               shopping:{needed:Array.isArray(safeShopping.needed)?safeShopping.needed:[],
                 pickedUp:Array.isArray(safeShopping.pickedUp)?safeShopping.pickedUp:[]},
