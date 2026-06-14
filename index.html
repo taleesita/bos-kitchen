@@ -478,7 +478,7 @@ function getUserData(state){
   return{v:1,mealPlan:state.mealPlan,shopping:state.shopping,holidays:state.holidays||{},
     customRecipes:(state.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id)),
     customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv,recOv,
-    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[],cookPlans:state.cookPlans||{}};
+    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[],cookPlans:state.cookPlans||{},nextWeek:state.nextWeek||{}};
 }
 function encodeSync(state){return btoa(unescape(encodeURIComponent(JSON.stringify(getUserData(state)))));}
 function decodeSync(code,cur){
@@ -842,7 +842,7 @@ function decodeSync(code,cur){
     noaRoster:Array.isArray(ud.noaRoster)?ud.noaRoster:[],
     cheeses:Array.isArray(ud.cheeses)?ud.cheeses:[],
     customCookbooks:Array.isArray(ud.customCookbooks)?ud.customCookbooks:[],
-    cookPlans:(ud.cookPlans&&typeof ud.cookPlans==='object')?ud.cookPlans:{}};
+    cookPlans:(ud.cookPlans&&typeof ud.cookPlans==='object')?ud.cookPlans:{},nextWeek:ud.nextWeek||{}};
 }
 // ── Firebase sync — scripts loaded dynamically so they never block page load ──
 let fbApp=null;
@@ -872,7 +872,7 @@ const NOA_SEED_ROSTER=['noa-r-01','noa-r-02','noa-r-03','noa-r-04','noa-r-05','n
 function buildInitial(){
   return{recipes:window.SEED.recipes,ingredients:window.SEED.ingredients,
     mealPlan:{weekStart:getWeekStart(),days:Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}])),
-    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{},noaRoster:[...NOA_SEED_ROSTER],cheeses:[],customCookbooks:[],cookPlans:{}};
+    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{},noaRoster:[...NOA_SEED_ROSTER],cheeses:[],customCookbooks:[],cookPlans:{},nextWeek:{mealPlan:{weekStart:null,days:Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}])),misc:[],noa:[],cooked:{}},shopping:{needed:[],pickedUp:[]}}};
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -946,7 +946,12 @@ function reducer(state,action){
     case'NOA_ROSTER_RM':return{...state,noaRoster:(state.noaRoster||[]).filter(id=>id!==action.recId)};
     case'NEW_WEEK':{
       const emptyDays=Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}]));
-      return{...state,mealPlan:{weekStart:getWeekStart(),days:emptyDays,misc:[],noa:[],cooked:{}},shopping:{needed:[],pickedUp:[]}};
+      const _nw=state.nextWeek||{};const _nwMp=_nw.mealPlan||{};
+      const _nwHasContent=Object.values(_nwMp.days||{}).some(d=>SLOTS.some(s=>(d[s]||[]).length))||(_nwMp.misc||[]).length||(_nwMp.noa||[]).length;
+      const promotedMP=_nwHasContent?{..._nwMp,weekStart:getWeekStart()}:{weekStart:getWeekStart(),days:emptyDays,misc:[],noa:[],cooked:{}};
+      const promotedShopping=(_nw.shopping&&(_nw.shopping.needed||[]).length)?_nw.shopping:{needed:[],pickedUp:[]};
+      const clearedNW={mealPlan:{weekStart:null,days:emptyDays,misc:[],noa:[],cooked:{}},shopping:{needed:[],pickedUp:[]}};
+      return{...state,mealPlan:promotedMP,shopping:promotedShopping,nextWeek:clearedNW};
     }
     case'TOGGLE_NEED':{
       const needed=state.shopping.needed.includes(action.id)?state.shopping.needed.filter(i=>i!==action.id):[...state.shopping.needed,action.id];
@@ -957,6 +962,57 @@ function reducer(state,action){
       return{...state,shopping:{...state.shopping,pickedUp}};
     }
     case'CLEAR_PICK':return{...state,shopping:{...state.shopping,pickedUp:[]}};
+    case'NW_MEAL_ADD_REC':{
+      const _nw=state.nextWeek||{};const _mp=_nw.mealPlan||{days:{},misc:[],noa:[],cooked:{}};
+      const _days={..._mp.days||{}};const _day={...(_days[action.day]||{})};const _slot=[...(_day[action.slot]||[])];
+      if(!_slot.includes(action.recId))_slot.push(action.recId);
+      _day[action.slot]=_slot;_days[action.day]=_day;
+      return{...state,nextWeek:{..._nw,mealPlan:{..._mp,days:_days}}};
+    }
+    case'NW_MEAL_RM_REC':{
+      const _nw=state.nextWeek||{};const _mp=_nw.mealPlan||{days:{},misc:[],noa:[],cooked:{}};
+      const _days={..._mp.days||{}};const _day={...(_days[action.day]||{})};
+      _day[action.slot]=(_day[action.slot]||[]).filter(id=>id!==action.recId);
+      _days[action.day]=_day;return{...state,nextWeek:{..._nw,mealPlan:{..._mp,days:_days}}};
+    }
+    case'NW_MEAL_TOGGLE_COOKED':{
+      const _nw=state.nextWeek||{};const _mp=_nw.mealPlan||{};
+      const _cooked={...(_mp.cooked||{})};const _k=action.key;
+      if(_cooked[_k])delete _cooked[_k]; else _cooked[_k]=true;
+      return{...state,nextWeek:{..._nw,mealPlan:{..._mp,cooked:_cooked}}};
+    }
+    case'NW_MISC_ADD':{
+      const _nw=state.nextWeek||{};const _mp=_nw.mealPlan||{misc:[]};
+      const _misc=[...(_mp.misc||[])];if(!_misc.includes(action.item))_misc.push(action.item);
+      return{...state,nextWeek:{..._nw,mealPlan:{..._mp,misc:_misc}}};
+    }
+    case'NW_MISC_RM':{
+      const _nw=state.nextWeek||{};const _mp=_nw.mealPlan||{misc:[]};
+      return{...state,nextWeek:{..._nw,mealPlan:{..._mp,misc:(_mp.misc||[]).filter(x=>x!==action.item)}}};
+    }
+    case'NW_NOA_ADD':{
+      const _nw=state.nextWeek||{};const _mp=_nw.mealPlan||{noa:[]};
+      const _noa=[...(_mp.noa||[])];if(!_noa.includes(action.item))_noa.push(action.item);
+      return{...state,nextWeek:{..._nw,mealPlan:{..._mp,noa:_noa}}};
+    }
+    case'NW_NOA_RM':{
+      const _nw=state.nextWeek||{};const _mp=_nw.mealPlan||{noa:[]};
+      return{...state,nextWeek:{..._nw,mealPlan:{..._mp,noa:(_mp.noa||[]).filter(x=>x!==action.item)}}};
+    }
+    case'NW_TOGGLE_NEED':{
+      const _nw=state.nextWeek||{};const _sh=_nw.shopping||{needed:[],pickedUp:[]};
+      const _needed=(_sh.needed||[]).includes(action.id)?(_sh.needed||[]).filter(i=>i!==action.id):[...(_sh.needed||[]),action.id];
+      return{...state,nextWeek:{..._nw,shopping:{..._sh,needed:_needed}}};
+    }
+    case'NW_TOGGLE_PICK':{
+      const _nw=state.nextWeek||{};const _sh=_nw.shopping||{needed:[],pickedUp:[]};
+      const _pickedUp=(_sh.pickedUp||[]).includes(action.id)?(_sh.pickedUp||[]).filter(i=>i!==action.id):[...(_sh.pickedUp||[]),action.id];
+      return{...state,nextWeek:{..._nw,shopping:{..._sh,pickedUp:_pickedUp}}};
+    }
+    case'NW_CLEAR':{
+      const _emptyDays=Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}]));
+      return{...state,nextWeek:{mealPlan:{weekStart:null,days:_emptyDays,misc:[],noa:[],cooked:{}},shopping:{needed:[],pickedUp:[]}}};
+    }
     case'HOL_TOGGLE':{
       const hd=state.holidays?.[action.hol]||{recipeIds:[]};
       const recipeIds=hd.recipeIds.includes(action.recId)?hd.recipeIds.filter(i=>i!==action.recId):[...hd.recipeIds,action.recId];
@@ -2798,6 +2854,9 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
   const[qIngsList,setQIngsList]=useState([]); // [{id,name}] chips
   const[noaTag,setNoaTag]=useState('Nutbear');
   const[noaTagExpanded,setNoaTagExpanded]=useState(false);
+  const[nwAdding,setNwAdding]=useState(null);
+  const[nwAddingMisc,setNwAddingMisc]=useState(false);
+  const[nwAddingNoa,setNwAddingNoa]=useState(false);
   // Hash-based routing for holiday plans: #plan=<id>
   const[cookPlanOpen,setCookPlanOpen]=useState(()=>location.hash.startsWith('#plan='));
   useEffect(()=>{
@@ -2834,13 +2893,15 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
   }
   function rmRec(day,slot,item){dispatch({type:'MEAL_RM_REC',day,slot,recId:item});}
   function addMulti(type,items){items.forEach(item=>dispatch({type,item}));showToast(`${items.length} items added!`);}
+  function nwAddRec(day,slot,rec){dispatch({type:'NW_MEAL_ADD_REC',day,slot,recId:rec.id});}
+  function nwRmRec(day,slot,item){dispatch({type:'NW_MEAL_RM_REC',day,slot,recId:item});}
 
   return<div className="content">
     <div className="sh">
       <div className="sh-title">📅 Meal Plan</div>
       <div style={{display:'flex',gap:6}}>
         <button className="btn btn-secondary btn-sm"onClick={()=>setCookPlanOpen(true)}>🎉 Holiday Plans</button>
-        <button className="btn btn-secondary btn-sm"onClick={()=>{dispatch({type:'NEW_WEEK'});setAdding(null);showToast('Week cleared!');}}>Clear week</button>
+        <button className="btn btn-secondary btn-sm"onClick={()=>{dispatch({type:'NEW_WEEK'});setAdding(null);setNwAdding(null);setNwAddingMisc(false);setNwAddingNoa(false);showToast('Week cleared!');}}>Clear week</button>
       </div>
     </div>
 
@@ -3176,6 +3237,205 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
         <button className="btn-ghost btn-sm"style={{marginTop:4}}onClick={()=>setAddingNoa(false)}>Done</button>
       </div>}
     </div>
+
+  {/* ── NEXT WEEK ─────────────────────────────────────────────────────────── */}
+  <div style={{margin:'40px 0 0'}}>
+    <div style={{display:'flex',alignItems:'center',gap:12}}>
+      <div style={{flex:1,height:3,background:'linear-gradient(90deg,transparent,var(--sage))',borderRadius:2}}/>
+      <div style={{background:'var(--sage-dark)',color:'white',fontWeight:800,fontSize:15,letterSpacing:1,padding:'7px 22px',borderRadius:20,boxShadow:'0 2px 10px rgba(0,0,0,.18)',whiteSpace:'nowrap'}}>📆 NEXT WEEK</div>
+      <div style={{flex:1,height:3,background:'linear-gradient(90deg,var(--sage),transparent)',borderRadius:2}}/>
+    </div>
+    <div style={{textAlign:'center',fontSize:11,color:'var(--muted)',letterSpacing:.5,margin:'8px 0 4px'}}>Plan ahead — when you hit "Clear week", next week promotes up automatically</div>
+  </div>
+  {(()=>{
+    const nwDays=state.nextWeek?.mealPlan?.days||{};
+    const nwMisc=state.nextWeek?.mealPlan?.misc||[];
+    const nwNoa=state.nextWeek?.mealPlan?.noa||[];
+    const nwNeeded=state.nextWeek?.shopping?.needed||[];
+    const nwPickedUp=state.nextWeek?.shopping?.pickedUp||[];
+    return<>
+      {/* NW: Calendar grid */}
+      <div className="cal-wrap">
+        <table className="cal-table">
+          <thead><tr>
+            <th></th>
+            {DAYS.map(d=><th key={d}>{d.slice(0,3)}</th>)}
+          </tr></thead>
+          <tbody>
+            {SLOTS.map(slot=><tr key={slot}>
+              <td className="row-label">{SLOT_LABELS[slot]}</td>
+              {DAYS.map(d=>{
+                const dkey=d.toLowerCase();
+                const items=(nwDays[dkey]||{})[slot]||[];
+                const isActive=nwAdding?.day===dkey&&nwAdding?.slot===slot;
+                return<td key={d}className={isActive?'adding-cell':''}>
+                  <div className="cal-cell">
+                    {items.map(item=><div key={item}className={`cal-chip${item.startsWith('text:')?' text-chip':''}`}>
+                      <span className="name"title={itemLabel(item)}style={item.startsWith('text:')?{}:{cursor:'pointer'}}
+                        onClick={()=>{if(!item.startsWith('text:')){const r=state.recipes.find(x=>x.id===item);if(r)setViewing(r);}}}>
+                        {itemLabel(item)}
+                      </span>
+                      <button onClick={()=>nwRmRec(dkey,slot,item)}>×</button>
+                    </div>)}
+                    {isActive
+                      ?<CalInlineInput recipes={state.recipes}onSelect={r=>nwAddRec(dkey,slot,r)}onClose={()=>setNwAdding(null)}planTag={planTag}existing={items}/>
+                      :<button className="cal-add"onClick={()=>setNwAdding(a=>(a?.day===dkey&&a?.slot===slot)?null:{day:dkey,slot})}>＋</button>
+                    }
+                  </div>
+                </td>;
+              })}
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+      {/* NW: Mobile vertical list */}
+      <div className="mob-plan">
+        {DAYS.map(d=>{
+          const dkey=d.toLowerCase();
+          return<div key={d}className="mob-day">
+            <div className="mob-day-hdr">{d}</div>
+            {SLOTS.map(slot=>{
+              const items=(nwDays[dkey]||{})[slot]||[];
+              const isActive=nwAdding?.day===dkey&&nwAdding?.slot===slot;
+              if(!items.length&&!isActive)return<div key={slot}className="mob-slot">
+                <div className="mob-slot-lbl">{SLOT_LABELS[slot].slice(0,4)}</div>
+                <div className="mob-slot-body"><button className="mob-add-btn"onClick={()=>setNwAdding({day:dkey,slot})}>＋</button></div>
+              </div>;
+              return<div key={slot}className="mob-slot">
+                <div className="mob-slot-lbl">{SLOT_LABELS[slot].slice(0,4)}</div>
+                <div className="mob-slot-body">
+                  {items.map(item=><div key={item}className={`cal-chip${item.startsWith('text:')?' text-chip':''}`}>
+                    <span className="name"title={itemLabel(item)}style={{cursor:item.startsWith('text:')?'default':'pointer'}}
+                      onClick={()=>{if(!item.startsWith('text:')){const r=state.recipes.find(x=>x.id===item);if(r)setViewing(r);}}}>
+                      {itemLabel(item)}
+                    </span>
+                    <button onClick={()=>nwRmRec(dkey,slot,item)}>×</button>
+                  </div>)}
+                  {isActive
+                    ?<CalInlineInput recipes={state.recipes}onSelect={r=>nwAddRec(dkey,slot,r)}onClose={()=>setNwAdding(null)}planTag={planTag}existing={items}/>
+                    :<button className="mob-add-btn"onClick={()=>setNwAdding({day:dkey,slot})}>＋</button>}
+                </div>
+              </div>;
+            })}
+          </div>;
+        })}
+      </div>
+      {/* NW: Misc */}
+      <div className="weekly-section">
+        <div className="weekly-section-title">
+          🛒 Next week's misc items
+          <button className="btn-icon"style={{marginLeft:'auto'}}onClick={()=>setNwAddingMisc(x=>!x)}>＋</button>
+        </div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:2}}>
+          {nwMisc.map(item=><div key={item}className="chip misc-chip">
+            {item}<button onClick={()=>dispatch({type:'NW_MISC_RM',item})}>×</button>
+          </div>)}
+          {nwMisc.length===0&&!nwAddingMisc&&<span style={{fontSize:12,color:'var(--muted)'}}>Add next week's one-off items here</span>}
+        </div>
+        {nwAddingMisc&&<div style={{marginTop:8}}>
+          <SearchDrop
+            items={(()=>{
+              const miscSet=new Set((nwMisc||[]).map(x=>x.toLowerCase()));
+              const normIng=s=>s.toLowerCase().trim().replace(/\s+/g,' ').replace(/chilli/g,'chili').replace(/yoghurt/g,'yogurt');
+              const seen=new Map();
+              [...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).forEach(i=>{
+                const norm=normIng(i.name);
+                if(!seen.has(norm)){seen.set(norm,{id:i.id,label:i.name,sub:i.store});}
+                else if(SEED_ING_IDS.has(i.id)&&!SEED_ING_IDS.has(seen.get(norm).id)){seen.set(norm,{id:i.id,label:i.name,sub:i.store});}
+              });
+              return[...seen.values()].filter(i=>!miscSet.has(i.label.toLowerCase()));
+            })()}
+            onSelect={item=>{
+              dispatch({type:'NW_MISC_ADD',item:item.label});
+              let miscIngId=item.id;
+              if(item.isNew){const newId=uid();dispatch({type:'SAVE_ING',ing:{id:newId,name:item.label,store:''}});miscIngId=newId;}
+              if(miscIngId&&!nwNeeded.includes(miscIngId)){dispatch({type:'NW_TOGGLE_NEED',id:miscIngId});}
+            }}
+            placeholder="Search or add…"
+            allowNew={true}
+            onPasteMulti={items=>{
+              items.forEach(label=>{
+                dispatch({type:'NW_MISC_ADD',item:label});
+                const existsIng=state.ingredients.find(i=>i.name.toLowerCase()===label.toLowerCase());
+                let pId=existsIng?existsIng.id:null;
+                if(!existsIng){const ni={id:uid(),name:label,store:''};dispatch({type:'SAVE_ING',ing:ni});pId=ni.id;}
+                if(pId&&!nwNeeded.includes(pId)){dispatch({type:'NW_TOGGLE_NEED',id:pId});}
+              });
+              showToast&&showToast(items.length+' items added!');setNwAddingMisc(false);
+            }}
+          />
+          <button className="btn-ghost btn-sm"style={{marginTop:4}}onClick={()=>setNwAddingMisc(false)}>Done</button>
+        </div>}
+      </div>
+      {/* NW: Noa */}
+      <div className="weekly-section">
+        <div className="weekly-section-title"style={{color:'var(--noa)'}}>
+          🌟 Noa's meals next week
+          <button className="btn-icon"style={{marginLeft:'auto'}}onClick={()=>setNwAddingNoa(x=>!x)}>＋</button>
+        </div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:2}}>
+          {nwNoa.map(item=>{const r=state.recipes.find(x=>x.name===item);return<div key={item}className="chip noa">
+            <span style={r?{cursor:'pointer'}:{}}onClick={()=>{if(r)setViewing(r);}}>{item}</span>
+            <button onClick={()=>dispatch({type:'NW_NOA_RM',item})}>×</button>
+          </div>;})}
+          {nwNoa.length===0&&!nwAddingNoa&&<span style={{fontSize:12,color:'var(--muted)'}}>Add Noa's foods for next week</span>}
+        </div>
+        {nwAddingNoa&&<div style={{marginTop:8}}>
+          <SearchDrop
+            items={(()=>{
+              const noaSet=new Set((nwNoa||[]).map(x=>x.toLowerCase()));
+              return[
+                ...[...state.ingredients].sort((a,b)=>a.name.localeCompare(b.name)).map(i=>({id:'ing_'+i.id,label:i.name,sub:i.store||'ingredient'})).filter(i=>!noaSet.has(i.label.toLowerCase())),
+                ...[...state.recipes].sort((a,b)=>a.name.localeCompare(b.name)).map(r=>({id:'rec_'+r.id,label:r.name,sub:'recipe'})).filter(r=>!noaSet.has(r.label.toLowerCase())),
+              ];
+            })()}
+            onSelect={item=>{
+              dispatch({type:'NW_NOA_ADD',item:item.label});
+              if(!item.isNew&&item.id.startsWith('rec_')){}
+              else{
+                let noaIngId=item.isNew?null:item.id.replace('ing_','');
+                if(item.isNew){const newId=uid();dispatch({type:'SAVE_ING',ing:{id:newId,name:item.label,store:''}});noaIngId=newId;}
+                if(noaIngId&&!nwNeeded.includes(noaIngId)){dispatch({type:'NW_TOGGLE_NEED',id:noaIngId});}
+              }
+            }}
+            placeholder="Search or add…"allowNew={true}
+          />
+          <button className="btn-ghost btn-sm"style={{marginTop:4}}onClick={()=>setNwAddingNoa(false)}>Done</button>
+        </div>}
+      </div>
+      {/* NW: Shopping list */}
+      {nwNeeded.length>0&&<div className="weekly-section">
+        <div className="weekly-section-title">
+          🧾 Next week's shopping list
+          <button className="btn btn-ghost btn-sm"style={{marginLeft:'auto',fontSize:11}}
+            onClick={()=>{nwNeeded.forEach(id=>{if(!nwPickedUp.includes(id))dispatch({type:'NW_TOGGLE_PICK',id});});}}>
+            Check all
+          </button>
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:3}}>
+          {nwNeeded.map(id=>{
+            const ing=state.ingredients.find(i=>i.id===id);if(!ing)return null;
+            const isPicked=nwPickedUp.includes(id);
+            return<div key={id}style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',borderBottom:'1px solid var(--border)'}}>
+              <button style={{width:20,height:20,borderRadius:4,border:'2px solid var(--sage)',background:isPicked?'var(--sage)':'white',flexShrink:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:11}}
+                onClick={()=>dispatch({type:'NW_TOGGLE_PICK',id})}>{isPicked?'✓':''}</button>
+              <span style={{flex:1,textDecoration:isPicked?'line-through':'none',color:isPicked?'var(--muted)':'inherit',fontSize:14}}>{ing.name}</span>
+              {ing.store&&<span style={{fontSize:11,color:'var(--muted)',background:'var(--bg)',border:'1px solid var(--border)',borderRadius:10,padding:'1px 7px'}}>{ing.store}</span>}
+              <button style={{color:'var(--muted)',fontSize:14,padding:'0 4px'}}
+                onClick={()=>dispatch({type:'NW_TOGGLE_NEED',id})}>×</button>
+            </div>;
+          })}
+        </div>
+      </div>}
+      {/* NW: Clear button */}
+      <div style={{display:'flex',justifyContent:'flex-end',padding:'8px 0 32px'}}>
+        <button className="btn btn-ghost btn-sm"style={{fontSize:12,color:'var(--muted)'}}
+          onClick={()=>{dispatch({type:'NW_CLEAR'});setNwAdding(null);setNwAddingMisc(false);setNwAddingNoa(false);showToast&&showToast('Next week cleared!');}}>
+          Clear next week
+        </button>
+      </div>
+    </>;
+  })()}
   {viewing&&<RecipeViewModal recipe={viewing}ingredients={state.ingredients}
     onEdit={()=>{setEditing(viewing);setViewing(null);}}
     onClose={()=>setViewing(null)}
@@ -5327,7 +5587,8 @@ function App({user,onSignOut}){
               noaRoster:[...new Set([...NOA_SEED_ROSTER,...(Array.isArray(ud.noaRoster)?ud.noaRoster:[])])],
               cheeses:Array.isArray(ud.cheeses)?ud.cheeses:[],
               customCookbooks:Array.isArray(ud.customCookbooks)?ud.customCookbooks:[],
-              cookPlans:(ud.cookPlans&&typeof ud.cookPlans==='object')?ud.cookPlans:{}
+              cookPlans:(ud.cookPlans&&typeof ud.cookPlans==='object')?ud.cookPlans:{},
+              nextWeek:ud.nextWeek||{}
             };
             fromFB.current=true; // mark so auto-save skips Firebase write-back
             fbInitialized.current=true; // Firebase had data — safe to write back on future changes
