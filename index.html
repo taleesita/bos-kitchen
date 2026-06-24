@@ -5346,10 +5346,13 @@ function App({user,onSignOut}){
             console.log('[fbListen] localOvData.recOv=',JSON.stringify(localOvData.recOv));
             console.log('[fbListen] ud.recOv=',JSON.stringify(ud.recOv));
             function mergeOv(fbOv,localOv){
+              // Firebase wins when it already has an entry for this ID.
+              // Local only wins when Firebase doesn't have it yet (pending write
+              // that hadn't fired before the page was closed/refreshed).
               const merged=[...(fbOv||[])];
+              const fbIds=new Set((fbOv||[]).map(function(x){return x.id;}));
               (localOv||[]).forEach(function(lo){
-                const idx=merged.findIndex(function(x){return x.id===lo.id;});
-                if(idx>=0){merged[idx]=lo;}else{merged.push(lo);}
+                if(!fbIds.has(lo.id)){merged.push(lo);}
               });
               return merged;
             }
