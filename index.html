@@ -419,6 +419,7 @@ textarea.inp{resize:vertical;min-height:70px;}
 .unit-toggle button{padding:3px 9px;border:none;background:none;cursor:pointer;color:var(--muted);font-family:inherit;}
 .unit-toggle button.on{background:var(--sage);color:white;font-weight:600;}
 </style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css"/>
 </head>
 <body>
 <div id="root"></div>
@@ -438,6 +439,8 @@ const NANNY_EMAILS=['rachelvaknin61@gmail.com'];
 firebase.initializeApp(FB_CONFIG);
 const kitchenAuth=firebase.auth();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useRef,useCallback,useMemo,useReducer}=React;
 
@@ -4691,6 +4694,7 @@ function HolidaysTab({state,dispatch,showToast}){
 const CHEESE_TYPES=['Fresh/Unripened','Soft','Semi-soft','Semi-hard','Hard','Blue','Processed'];
 const CHEESE_FLAVORS=['Buttery','Creamy','Earthy','Funky','Mild','Nutty','Savory','Sharp','Smoky','Sweet','Tangy','Pungent'];
 const CHEESE_TEXTURES=['Chewy','Crumbly','Creamy','Firm','Flakey','Gooey','Grainy','Springy','Waxy'];
+const CHEESE_STORES=['Pick Cheese',"Trader Joe's",'Whole Foods','Costco','Wegmans','Eataly',"Murray's Cheese",'Di Bruno Bros','Local farmers market','Restaurant / bar','Specialty cheese shop','Gift / received',"Taly's parents",'Other'];
 const CHEESE_RATING_LABELS={0.5:'🫤 Meh',1:'😐 Not great',1.5:'🙂 OK',2:'😊 Fine',2.5:'👍 Decent',3:'🙂 Good',3.5:'😄 Pretty good',4:'😄 Great',4.5:'🤩 Very good',5:'🤩 Amazing!'};
 const COUNTRIES=['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cabo Verde','Cambodia','Cameroon','Canada','Central African Republic','Chad','Chile','China','Colombia','Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','Denmark','Djibouti','Dominica','Dominican Republic','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Kiribati','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','North Macedonia','Norway','Oman','Pakistan','Palau','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino','São Tomé and Príncipe','Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','Solomon Islands','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkey','Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
 
@@ -4881,49 +4885,188 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
   const[showScanner,setShowScanner]=useState(false);
   const[originQ,setOriginQ]=useState(f.origin||'');
   const[originDd,setOriginDd]=useState(false);
+  const[cropPending,setCropPending]=useState(null);
+  const[ocrRunning,setOcrRunning]=useState(false);
+  // Location dropdown
+  const initLocSel=CHEESE_STORES.includes(f.location)?f.location:(f.location?'Other':'');
+  const[locSel,setLocSel]=useState(initLocSel);
+  const[locCustom,setLocCustom]=useState(CHEESE_STORES.includes(f.location)?'':f.location);
+  const cropImgRef=useRef(null);
+  const cropperRef=useRef(null);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const toggleArr=(k,v)=>set(k,f[k].includes(v)?f[k].filter(x=>x!==v):[...f[k],v]);
-  async function handlePhoto(e){
-    const file=e.target.files[0];if(!file)return;
-    setUploading(true);
-    const data=await resizeImageToDataURL(file,400,0.65);
-    setUploading(false);
-    if(data)set('photo',data);
+
+  useEffect(()=>{
+    if(!cropPending||!cropImgRef.current)return;
+    if(cropperRef.current){cropperRef.current.destroy();cropperRef.current=null;}
+    const img=cropImgRef.current;
+    const init=()=>{
+      if(!window.Cropper)return;
+      cropperRef.current=new window.Cropper(img,{viewMode:1,dragMode:'crop',autoCropArea:0.85,responsive:true});
+    };
+    if(img.complete&&img.naturalWidth)init();else img.addEventListener('load',init,{once:true});
+    return()=>{if(cropperRef.current){cropperRef.current.destroy();cropperRef.current=null;}};
+  },[cropPending]);
+
+  function readFileForCrop(file,forNotes){
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=e=>setCropPending({imageSrc:e.target.result,forNotes});
+    reader.readAsDataURL(file);
   }
+
+  function preprocessForOCR(srcCanvas){
+    const MIN_SIDE=1800;
+    const scale=Math.max(1,MIN_SIDE/Math.max(srcCanvas.width,srcCanvas.height));
+    const w=Math.round(srcCanvas.width*scale),h=Math.round(srcCanvas.height*scale);
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);
+    ctx.drawImage(srcCanvas,0,0,w,h);
+    const id=ctx.getImageData(0,0,w,h);const d=id.data;
+    for(let i=0;i<d.length;i+=4){
+      const g=Math.min(255,(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2])*1.4);
+      d[i]=d[i+1]=d[i+2]=g;
+    }
+    ctx.putImageData(id,0,0);return c;
+  }
+
+  async function confirmCrop(){
+    if(!cropperRef.current)return;
+    const canvas=cropperRef.current.getCroppedCanvas({maxWidth:900,maxHeight:900});
+    if(!canvas)return;
+    if(cropPending.forNotes){
+      setCropPending(null);setOcrRunning(true);
+      try{
+        const ocrCanvas=preprocessForOCR(canvas);
+        const result=await window.Tesseract.recognize(ocrCanvas,'eng',{logger:()=>{}});
+        const raw=(result.data?.text||'').trim();
+        const lines=raw.split('\n').map(s=>s.trim()).filter(s=>s.length>2);
+        const text=lines.join('\n');
+        if(text)set('notes',(f.notes?f.notes+'\n\n':'')+text);
+      }catch(e){console.error('OCR',e);}
+      setOcrRunning(false);
+    }else{
+      const data=canvas.toDataURL('image/jpeg',0.72);
+      set('photo',data);setCropPending(null);
+    }
+  }
+
   function save(){
     if(!f.name.trim())return;
     onSave({...f,id:f.id||crypto.randomUUID(),name:f.name.trim()});
   }
-  const chip=(label,active,onClick)=><button type="button"key={label}
-    onClick={onClick}
+  const chip=(label,active,onClick)=><button type="button" key={label} onClick={onClick}
     style={{padding:'4px 10px',borderRadius:20,border:'1.5px solid',fontSize:12,cursor:'pointer',transition:'all .15s',
       background:active?'var(--sage)':'white',borderColor:active?'var(--sage)':'var(--border)',
       color:active?'white':'var(--text)',fontWeight:active?600:400}}>{label}</button>;
+
   return<div>
     {showScanner&&<BarcodeScanner
       onResult={({name,origin})=>{if(name)set('name',name);if(origin){set('origin',origin);setOriginQ(origin);}}}
       onClose={()=>setShowScanner(false)}/>}
+
+    {/* Crop modal */}
+    {cropPending&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.9)',zIndex:2000,display:'flex',flexDirection:'column'}}>
+      <div style={{flex:1,overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <img ref={cropImgRef} src={cropPending.imageSrc} alt="crop"
+          style={{maxWidth:'100%',maxHeight:'100%',display:'block'}}/>
+      </div>
+      <div style={{padding:'14px 16px',display:'flex',gap:10,background:'#111',justifyContent:'flex-end',flexShrink:0}}>
+        <button className="btn btn-secondary"
+          onClick={()=>{if(cropperRef.current){cropperRef.current.destroy();cropperRef.current=null;}setCropPending(null);}}>
+          Cancel
+        </button>
+        <button className="btn btn-primary" onClick={confirmCrop}>
+          {cropPending.forNotes?'📖 Extract text':'✂️ Use crop'}
+        </button>
+      </div>
+    </div>}
+
+    {/* OCR spinner overlay */}
+    {ocrRunning&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:2000,
+      display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:14}}>
+      <div style={{width:38,height:38,border:'4px solid white',borderTopColor:'transparent',
+        borderRadius:'50%',animation:'spin 1s linear infinite'}}/>
+      <span style={{color:'white',fontWeight:600,fontSize:15}}>Reading text…</span>
+    </div>}
+
+    {/* Name */}
     <div className="fg">
       <label className="lbl">Cheese name *</label>
       <div style={{display:'flex',gap:6}}>
-        <input className="inp" value={f.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. Époisses de Bourgogne" style={{flex:1}}/>
+        <input className="inp" value={f.name} onChange={e=>set('name',e.target.value)}
+          placeholder="e.g. Époisses de Bourgogne" style={{flex:1}}/>
         <button type="button" className="btn btn-secondary btn-sm"
           style={{flexShrink:0,padding:'7px 10px',whiteSpace:'nowrap'}}
           onClick={()=>setShowScanner(true)} title="Scan barcode">📷 Scan</button>
       </div>
     </div>
+
+    {/* Date */}
     <div className="fg"><label className="lbl">Date tried</label>
       <input className="inp" type="date" value={f.dateTried} onChange={e=>set('dateTried',e.target.value)}/>
     </div>
+
+    {/* Photo — camera as primary CTA */}
+    <div className="fg">
+      <label className="lbl">Photo</label>
+      {f.photo
+        ?<div>
+          <img src={f.photo} alt="cheese"
+            style={{width:120,height:120,objectFit:'cover',borderRadius:8,border:'1px solid var(--border)',display:'block',marginBottom:6}}/>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <label style={{display:'inline-flex',alignItems:'center',gap:5,padding:'6px 12px',
+              background:'var(--sage)',color:'white',borderRadius:'var(--r)',cursor:'pointer',fontSize:13,fontWeight:600}}>
+              📷 Retake
+              <input type="file" accept="image/*" capture="environment"
+                onChange={e=>readFileForCrop(e.target.files[0],false)} style={{display:'none'}}/>
+            </label>
+            <button type="button" className="btn-ghost btn-sm" onClick={()=>set('photo',null)}>Remove</button>
+          </div>
+        </div>
+        :<div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+          <label style={{display:'inline-flex',alignItems:'center',gap:6,padding:'11px 18px',
+            background:'var(--sage)',color:'white',borderRadius:'var(--r)',cursor:'pointer',
+            fontWeight:700,fontSize:15,boxShadow:'0 1px 4px rgba(0,0,0,.12)'}}>
+            📷 Take photo
+            <input type="file" accept="image/*" capture="environment"
+              onChange={e=>readFileForCrop(e.target.files[0],false)} style={{display:'none'}}/>
+          </label>
+          <label style={{display:'inline-flex',alignItems:'center',gap:5,padding:'9px 14px',
+            background:'white',color:'var(--muted)',border:'1.5px solid var(--border)',
+            borderRadius:'var(--r)',cursor:'pointer',fontSize:13}}>
+            🖼️ Library
+            <input type="file" accept="image/*"
+              onChange={e=>readFileForCrop(e.target.files[0],false)} style={{display:'none'}}/>
+          </label>
+          {uploading&&<span style={{fontSize:11,color:'var(--muted)'}}>Processing…</span>}
+        </div>}
+    </div>
+
+    {/* Type */}
     <div className="fg"><label className="lbl">Type</label>
       <select className="inp" value={f.cheeseType} onChange={e=>set('cheeseType',e.target.value)}>
         <option value="">— pick one —</option>
         {CHEESE_TYPES.map(t=><option key={t}>{t}</option>)}
       </select>
     </div>
+
+    {/* Where you found it — dropdown */}
     <div className="fg"><label className="lbl">Where you found it</label>
-      <input className="inp" value={f.location} onChange={e=>set('location',e.target.value)} placeholder="e.g. Whole Foods"/>
+      <select className="inp" value={locSel} onChange={e=>{
+        const v=e.target.value;setLocSel(v);
+        if(v!=='Other'){set('location',v);}else{set('location',locCustom);}
+      }}>
+        <option value="">— pick one —</option>
+        {CHEESE_STORES.map(s=><option key={s} value={s}>{s}</option>)}
+      </select>
+      {locSel==='Other'&&<input className="inp" style={{marginTop:6}} value={locCustom}
+        placeholder="Where did you find it?"
+        onChange={e=>{setLocCustom(e.target.value);set('location',e.target.value);}}/>}
     </div>
+
+    {/* Origin */}
     <div className="fg" style={{position:'relative'}}><label className="lbl">Origin</label>
       <input className="inp" value={originQ}
         onChange={e=>{setOriginQ(e.target.value);set('origin',e.target.value);setOriginDd(true);}}
@@ -4934,12 +5077,15 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
         const q=originQ.toLowerCase().trim();
         const matches=COUNTRIES.filter(c=>c.toLowerCase().includes(q)).slice(0,8);
         return matches.length>0?<div className="dd" style={{top:'calc(100% + 2px)',maxHeight:200}}>
-          {matches.map(c=><div key={c} className="dd-item" onMouseDown={e=>{e.preventDefault();set('origin',c);setOriginQ(c);setOriginDd(false);}}>
+          {matches.map(c=><div key={c} className="dd-item"
+            onMouseDown={e=>{e.preventDefault();set('origin',c);setOriginQ(c);setOriginDd(false);}}>
             {c}
           </div>)}
         </div>:null;
       })()}
     </div>
+
+    {/* Rating */}
     <div className="fg" style={{display:'flex',gap:10,alignItems:'flex-end',flexWrap:'wrap'}}>
       <div style={{flex:1,minWidth:160}}>
         <label className="lbl">Rating</label>
@@ -4948,38 +5094,49 @@ function CheeseForm({cheese,onSave,onDelete,onCancel}){
           {f.rating>0&&<span style={{fontSize:12,color:'var(--muted)'}}>{CHEESE_RATING_LABELS[f.rating]||''}</span>}
         </div>
       </div>
-      <button type="button"
-        onClick={()=>set('wouldBuyAgain',!f.wouldBuyAgain)}
-        style={{flexShrink:0,padding:'7px 12px',borderRadius:'var(--r)',border:`2px solid ${f.wouldBuyAgain?'#f59e0b':'var(--border)'}`,
+      <button type="button" onClick={()=>set('wouldBuyAgain',!f.wouldBuyAgain)}
+        style={{flexShrink:0,padding:'7px 12px',borderRadius:'var(--r)',
+          border:`2px solid ${f.wouldBuyAgain?'#f59e0b':'var(--border)'}`,
           background:f.wouldBuyAgain?'#fffbeb':'white',cursor:'pointer',
-          display:'flex',alignItems:'center',gap:6,
-          fontSize:13,fontWeight:f.wouldBuyAgain?700:500,
+          display:'flex',alignItems:'center',gap:6,fontSize:13,
+          fontWeight:f.wouldBuyAgain?700:500,
           color:f.wouldBuyAgain?'#92400e':'var(--muted)',transition:'all .2s',whiteSpace:'nowrap'}}>
         <span style={{fontSize:18}}>{f.wouldBuyAgain?'🏆':'🧀'}</span>
         {f.wouldBuyAgain?'Buy again ✓':'Would buy again?'}
       </button>
     </div>
+
+    {/* Flavors */}
     <div className="fg"><label className="lbl">Flavor profile</label>
       <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
         {CHEESE_FLAVORS.map(fl=>chip(fl,(f.flavors||[]).includes(fl),()=>toggleArr('flavors',fl)))}
       </div>
     </div>
+
+    {/* Textures */}
     <div className="fg"><label className="lbl">Body &amp; texture</label>
       <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
         {CHEESE_TEXTURES.map(tx=>chip(tx,(f.textures||[]).includes(tx),()=>toggleArr('textures',tx)))}
       </div>
     </div>
-    <div className="fg"><label className="lbl">Notes</label>
-      <textarea className="inp" value={f.notes} onChange={e=>set('notes',e.target.value)} placeholder="Tasting notes, pairings, context…" rows={3}/>
+
+    {/* Notes + OCR scan button */}
+    <div className="fg">
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+        <label className="lbl" style={{marginBottom:0}}>Notes</label>
+        <label style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 11px',
+          background:'white',color:'var(--muted)',border:'1.5px solid var(--border)',
+          borderRadius:20,cursor:'pointer',fontSize:12,fontWeight:500,whiteSpace:'nowrap'}}>
+          📖 Scan text
+          <input type="file" accept="image/*" capture="environment"
+            onChange={e=>readFileForCrop(e.target.files[0],true)} style={{display:'none'}}/>
+        </label>
+      </div>
+      <textarea className="inp" value={f.notes} onChange={e=>set('notes',e.target.value)}
+        placeholder="Tasting notes, pairings, context…" rows={3}/>
     </div>
-    <div className="fg"><label className="lbl">Photo</label>
-      {f.photo&&<div style={{marginBottom:8}}>
-        <img src={f.photo} alt="cheese" style={{width:120,height:120,objectFit:'cover',borderRadius:8,border:'1px solid var(--border)'}}/>
-        <button type="button" className="btn-ghost btn-sm" style={{display:'block',marginTop:4}} onClick={()=>set('photo',null)}>Remove photo</button>
-      </div>}
-      <input type="file" accept="image/*" onChange={handlePhoto} style={{fontSize:12,color:'var(--muted)'}}/>
-      {uploading&&<span style={{fontSize:11,color:'var(--muted)',marginLeft:6}}>Resizing…</span>}
-    </div>
+
+    {/* Actions */}
     <div style={{display:'flex',gap:8,marginTop:4,justifyContent:'space-between'}}>
       <div style={{display:'flex',gap:8}}>
         <button className="btn btn-primary" onClick={save} disabled={!f.name.trim()}>
@@ -5007,7 +5164,7 @@ function CheeseCard({cheese,onEdit}){
             {cheese.isVegan&&<span style={{marginLeft:6,fontSize:10,background:'#dcfce7',color:'#166534',borderRadius:10,padding:'1px 6px'}}>🌱 vegan</span>}
             {cheese.wouldBuyAgain&&<span style={{marginLeft:4,fontSize:10,background:'#fef9c3',color:'#854d0e',borderRadius:10,padding:'1px 6px'}}>⭐ buy again</span>}
           </div>
-          <button className="btn-icon" onClick={()=>onEdit(cheese)} style={{flexShrink:0,padding:'3px 6px',fontSize:13}}>✏️</button>
+          <button className="btn-icon" onClick={()=>onEdit(cheese)} style={{flexShrink:0,padding:'3px 6px',fontSize:13,transform:'scaleX(-1)'}}>✏️</button>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8,marginTop:3}}>
           <CheeseStars value={cheese.rating} size={14}/>
