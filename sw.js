@@ -1,5 +1,5 @@
 // Bo's Kitchen Service Worker
-const CACHE = 'bos-kitchen-v1';
+const CACHE = 'bos-kitchen-v2';
 
 const PRECACHE = [
   './index.html',
