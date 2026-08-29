@@ -1002,7 +1002,11 @@ function reducer(state,action){
         ?state.mealPlan.noa.map(n=>n===oldName?newName:n)
         :state.mealPlan?.noa;
       const mealPlan=noa!==state.mealPlan?.noa?{...state.mealPlan,noa}:state.mealPlan;
-      return{...state,recipes,ingredients,mealPlan};
+      // Auto-add to noaRoster if recipe has a noaLabel
+      const noaRoster=action.rec.noaLabel
+        ?[...new Set([...(state.noaRoster||[]),action.rec.id])]
+        :(state.noaRoster||[]);
+      return{...state,recipes,ingredients,mealPlan,noaRoster};
     }
     case'DEL_REC':return{...state,recipes:state.recipes.filter(r=>r.id!==action.id)};
     case'MEAL_ADD_REC':{
@@ -4150,7 +4154,7 @@ function NoaTab({state,dispatch,showToast,isNanny,onAddToHuckle}){
 
   // All Nutbear recipes that have ever been added to the roster
   const noaRecipes=useMemo(()=>
-    (state.recipes||[]).filter(r=>rosterSet.has(r.id))
+    (state.recipes||[]).filter(r=>rosterSet.has(r.id)||r.noaLabel)
       .sort((a,b)=>a.name.localeCompare(b.name)),
   [state.recipes,roster]);
 
