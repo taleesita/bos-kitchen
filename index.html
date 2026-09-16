@@ -1443,8 +1443,21 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
           <option value="Diabetes Friendly">Diabetes Friendly</option><option value="Lactation">Lactation</option>
         </select>
       </div>
-      <div className="fg"><label className="lbl">Recime URL</label><input className="inp"value={url}onChange={e=>setUrl(e.target.value)}placeholder="https://recime.app/…"/></div>
-      <div className="fg"><label className="lbl">Original source (Instagram, blog…)</label><input className="inp"value={sourceUrl}onChange={e=>setSourceUrl(e.target.value)}placeholder="https://instagram.com/…"/></div>
+      <div className="fg"><label className="lbl">Cookbooks</label>
+        <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:4}}>{tags.map(t=><span key={t}style={{background:'var(--sage-light)',color:'var(--sage-dark)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 8px',fontSize:11,display:'inline-flex',alignItems:'center',gap:3}}>{COOKBOOK_EMOJIS[t]?COOKBOOK_EMOJIS[t]+' ':''}{t}<button onClick={()=>setTags(ts=>ts.filter(x=>x!==t))}style={{background:'none',border:'none',cursor:'pointer',padding:0,color:'var(--muted)',lineHeight:1,marginLeft:2}}>×</button></span>)}</div>
+        <div className="dd-wrap"style={{display:'flex',gap:4,position:'relative'}}>
+          <input className="inp"style={{flex:1,fontSize:11,padding:'3px 7px'}}value={tagInput}
+            onChange={e=>{setTagInput(e.target.value);setTagDdOpen(true);}}
+            onFocus={()=>setTagDdOpen(true)}
+            onBlur={()=>setTimeout(()=>setTagDdOpen(false),160)}
+            placeholder="Add cookbook…"
+            onKeyDown={e=>{if(e.key==='Enter'&&tagInput.trim()){e.preventDefault();const t=tagInput.trim();if(!tags.includes(t))setTags(ts=>[...ts,t]);setTagInput('');setTagDdOpen(false);}if(e.key==='Escape')setTagDdOpen(false);}}/>
+          <button className="btn btn-secondary btn-sm"onClick={()=>{const t=tagInput.trim();if(t&&!tags.includes(t))setTags(ts=>[...ts,t]);setTagInput('');setTagDdOpen(false);}}>+</button>
+          {tagDdOpen&&(()=>{const ms=allCookbooks.filter(c=>!tags.includes(c)&&(!tagInput.trim()||c.toLowerCase().includes(tagInput.toLowerCase())));return ms.length>0?<div className="dd"style={{top:'calc(100% + 2px)',maxHeight:180,left:0,right:'36px'}}>
+            {ms.slice(0,14).map(c=><div key={c}className="dd-item"onMouseDown={e=>{e.preventDefault();if(!tags.includes(c))setTags(ts=>[...ts,c]);setTagInput('');setTagDdOpen(false);}}>{COOKBOOK_EMOJIS[c]?COOKBOOK_EMOJIS[c]+' ':''}{c}</div>)}
+          </div>:null;})()}
+        </div>
+      </div>
       {isNutbear&&<div className="fg">
         <label className="lbl">Noa label <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,color:'var(--muted)',fontSize:10}}>(short code shown on Noa tab, e.g. RP)</span></label>
         <input className="inp"style={{textTransform:'uppercase',fontWeight:600,letterSpacing:'0.5px',borderColor:noaLabelError?'var(--red)':undefined}}
@@ -1459,6 +1472,8 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
         <input className="inp"value={noaCategory}onChange={e=>setNoaCategory(e.target.value)}placeholder="e.g. Soup" list="noa-cat-opts-modal"/>
         <datalist id="noa-cat-opts-modal">{[...new Set((allRecipes||[]).map(r=>r.noaCategory).filter(Boolean))].sort().map(c=><option key={c}value={c}/>)}</datalist>
       </div>}
+      <div className="fg"><label className="lbl">Recime URL</label><input className="inp"value={url}onChange={e=>setUrl(e.target.value)}placeholder="https://recime.app/…"/></div>
+      <div className="fg"><label className="lbl">Original source (Instagram, blog…)</label><input className="inp"value={sourceUrl}onChange={e=>setSourceUrl(e.target.value)}placeholder="https://instagram.com/…"/></div>
       <div className="fg">
         <label className="lbl">Photo</label>
         {imageUrl&&<div style={{position:'relative',marginBottom:6}}>
@@ -1485,21 +1500,6 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
         }}/>
       </div>
       <div className="fg"><label className="lbl">Total Time <span style={{fontSize:10,color:'var(--muted)',fontWeight:400,textTransform:'none'}}>(minutes, used for time filter)</span></label><input className="inp"type="number"min="0"max="999"value={time}onChange={e=>setTime(e.target.value)}placeholder="e.g. 30"/></div>
-      <div className="fg"><label className="lbl">Cookbooks</label>
-        <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:4}}>{tags.map(t=><span key={t}style={{background:'var(--sage-light)',color:'var(--sage-dark)',border:'1px solid var(--sage)',borderRadius:'var(--r-sm)',padding:'2px 8px',fontSize:11,display:'inline-flex',alignItems:'center',gap:3}}>{COOKBOOK_EMOJIS[t]?COOKBOOK_EMOJIS[t]+' ':''}{t}<button onClick={()=>setTags(ts=>ts.filter(x=>x!==t))}style={{background:'none',border:'none',cursor:'pointer',padding:0,color:'var(--muted)',lineHeight:1,marginLeft:2}}>×</button></span>)}</div>
-        <div className="dd-wrap"style={{display:'flex',gap:4,position:'relative'}}>
-          <input className="inp"style={{flex:1,fontSize:11,padding:'3px 7px'}}value={tagInput}
-            onChange={e=>{setTagInput(e.target.value);setTagDdOpen(true);}}
-            onFocus={()=>setTagDdOpen(true)}
-            onBlur={()=>setTimeout(()=>setTagDdOpen(false),160)}
-            placeholder="Add cookbook…"
-            onKeyDown={e=>{if(e.key==='Enter'&&tagInput.trim()){e.preventDefault();const t=tagInput.trim();if(!tags.includes(t))setTags(ts=>[...ts,t]);setTagInput('');setTagDdOpen(false);}if(e.key==='Escape')setTagDdOpen(false);}}/>
-          <button className="btn btn-secondary btn-sm"onClick={()=>{const t=tagInput.trim();if(t&&!tags.includes(t))setTags(ts=>[...ts,t]);setTagInput('');setTagDdOpen(false);}}>+</button>
-          {tagDdOpen&&(()=>{const ms=allCookbooks.filter(c=>!tags.includes(c)&&(!tagInput.trim()||c.toLowerCase().includes(tagInput.toLowerCase())));return ms.length>0?<div className="dd"style={{top:'calc(100% + 2px)',maxHeight:180,left:0,right:'36px'}}>
-            {ms.slice(0,14).map(c=><div key={c}className="dd-item"onMouseDown={e=>{e.preventDefault();if(!tags.includes(c))setTags(ts=>[...ts,c]);setTagInput('');setTagDdOpen(false);}}>{COOKBOOK_EMOJIS[c]?COOKBOOK_EMOJIS[c]+' ':''}{c}</div>)}
-          </div>:null;})()}
-        </div>
-      </div>
       <div className="fg">
         <label className="lbl">Ingredients</label>
         <table style={{width:'100%',borderCollapse:'collapse',marginBottom:6}}>
