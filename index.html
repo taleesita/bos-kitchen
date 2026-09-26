@@ -3876,31 +3876,39 @@ function ShoppingTab({state,dispatch,showToast,phase}){
       <div style={{fontSize:12,color:'var(--muted)',marginBottom:10}}>Check off everything you need to buy. Skip things you already have.</div>
       {reviewItems.length===0&&<div className="empty"><div className="empty-icon">📋</div>Add meals to your plan first.</div>}
       {(()=>{
-        // Group by store, then apply sort/dividers same as Shop
-        const g={"Trader Joe's":[],"Whole Foods":[],"Other":[]};
-        for(const i of reviewItems){
-          const s=(i.store||'').toLowerCase();
-          if(s.includes('trader')||s.includes('tj'))g["Trader Joe's"].push(i);
-          else if(s.includes('whole'))g["Whole Foods"].push(i);
-          else g["Other"].push(i);
+        const divStyle={fontSize:10,fontWeight:700,color:'var(--sage-dark)',padding:'5px 13px 2px',background:'var(--cream)',borderBottom:'1px solid var(--border)'};
+        function renderFlat(items,getKey){
+          const sorted=sortItems(items);let lastDiv=null;
+          return<div className="card"style={{padding:0,overflow:'hidden'}}>
+            {sorted.map(item=>{
+              const k=getKey(item);
+              const divider=k!==lastDiv?(lastDiv=k,<div style={divStyle}>{k}</div>):null;
+              const isKnownIng=state.ingredients.find(i=>i.id===item.id);
+              return<React.Fragment key={item.id}>{divider}<ShopRow showRecipe={showRecipe}showQty={showQty}item={item}
+                checked={needed.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_NEED',id:item.id})}showStore={false}
+                onViewRecipe={onViewRecipe}recipeNames={recipeNames}
+                onSaveIng={isKnownIng?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/></React.Fragment>;
+            })}
+          </div>;
         }
+        if(sortBy==='recipe')return renderFlat(reviewItems,i=>i.sources[0]||'Other');
+        if(sortBy==='aisle')return renderFlat(reviewItems,i=>getAisle(i.name));
+        // A-Z: group by store
+        const g={"Trader Joe's":[],"Whole Foods":[],"Other":[]};
+        for(const i of reviewItems){const s=(i.store||'').toLowerCase();if(s.includes('trader')||s.includes('tj'))g["Trader Joe's"].push(i);else if(s.includes('whole'))g["Whole Foods"].push(i);else g["Other"].push(i);}
         const storeEntries=Object.entries(g).filter(([,items])=>items.length>0);
         const multiStore=storeEntries.length>1;
         return storeEntries.map(([storeName,storeItems])=>{
           const sorted=sortItems(storeItems);
-          let lastDiv=null;
           return<div key={storeName}style={{marginBottom:12}}>
             {multiStore&&<div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>{storeName}</div>}
             <div className="card"style={{padding:0,overflow:'hidden'}}>
               {sorted.map(item=>{
-                let divider=null;
-                if(sortBy==='recipe'){const r=item.sources[0]||'Other';if(r!==lastDiv){lastDiv=r;divider=<div style={{fontSize:10,fontWeight:700,color:'var(--sage-dark)',padding:'5px 13px 2px',background:'var(--cream)',borderBottom:'1px solid var(--border)'}}>{r}</div>;}}
-                if(sortBy==='aisle'){const a=getAisle(item.name);if(a!==lastDiv){lastDiv=a;divider=<div style={{fontSize:10,fontWeight:700,color:'var(--sage-dark)',padding:'5px 13px 2px',background:'var(--cream)',borderBottom:'1px solid var(--border)'}}>{a}</div>;}}
                 const isKnownIng=state.ingredients.find(i=>i.id===item.id);
-                return<React.Fragment key={item.id}>{divider}<ShopRow showRecipe={showRecipe}showQty={showQty}item={item}
+                return<ShopRow key={item.id}showRecipe={showRecipe}showQty={showQty}item={item}
                   checked={needed.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_NEED',id:item.id})}showStore={!multiStore}
                   onViewRecipe={onViewRecipe}recipeNames={recipeNames}
-                  onSaveIng={isKnownIng?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/></React.Fragment>;
+                  onSaveIng={isKnownIng?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/>;
               })}
             </div>
           </div>;
@@ -3919,32 +3927,35 @@ function ShoppingTab({state,dispatch,showToast,phase}){
         <div style={{fontSize:20,fontWeight:700,color:'var(--sage-dark)',marginBottom:4}}>You got everything!</div>
         <div style={{fontSize:14,color:'var(--muted)'}}>🛒✨ Shopping complete ✨🛒</div>
       </div>}
-      {Object.entries(byStore).map(([storeName,items])=>{
-        if(!items.length)return null;
-        const sorted=sortItems(items);
-        // When sorting by recipe, show recipe dividers
-        let lastRecipe=null;
-        return<div key={storeName}style={{marginBottom:12}}>
-          <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>{storeName}</div>
-          <div className="card"style={{padding:0,overflow:'hidden'}}>
+      {(()=>{
+        const divStyle={fontSize:10,fontWeight:700,color:'var(--sage-dark)',padding:'5px 13px 2px',background:'var(--cream)',borderBottom:'1px solid var(--border)'};
+        function renderShopRow(item){
+          const isKnownIng2=state.ingredients.find(i=>i.id===item.id);
+          return<ShopRow key={item.id}item={item}showQty={showQty}showRecipe={showRecipe}checked={pickedUp.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_PICK',id:item.id})}showStore={false}
+            onViewRecipe={onViewRecipe}recipeNames={recipeNames}
+            onSaveIng={isKnownIng2?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/>;
+        }
+        if(sortBy==='recipe'||sortBy==='aisle'){
+          const getKey=sortBy==='recipe'?i=>i.sources[0]||'Other':i=>getAisle(i.name);
+          const sorted=sortItems(shopItems);let lastDiv=null;
+          return<div style={{marginBottom:12}}><div className="card"style={{padding:0,overflow:'hidden'}}>
             {sorted.map(item=>{
-              let divider=null;
-              if(sortBy==='recipe'){
-                const r=item.sources[0]||'Other';
-                if(r!==lastRecipe){lastRecipe=r;divider=<div style={{fontSize:10,fontWeight:700,color:'var(--sage-dark)',padding:'5px 13px 2px',background:'var(--cream)',borderBottom:'1px solid var(--border)'}}>{r}</div>;}
-              }
-              if(sortBy==='aisle'){
-                const a=getAisle(item.name);
-                if(a!==lastRecipe){lastRecipe=a;divider=<div style={{fontSize:10,fontWeight:700,color:'var(--sage-dark)',padding:'5px 13px 2px',background:'var(--cream)',borderBottom:'1px solid var(--border)'}}>{a}</div>;}
-              }
-              const isKnownIng2=state.ingredients.find(i=>i.id===item.id);
-              return<React.Fragment key={item.id}>{divider}<ShopRow item={item}showQty={showQty}showRecipe={showRecipe}checked={pickedUp.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_PICK',id:item.id})}showStore={false}
-                onViewRecipe={onViewRecipe}recipeNames={recipeNames}
-                onSaveIng={isKnownIng2?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/></React.Fragment>;
+              const k=getKey(item);
+              const divider=k!==lastDiv?(lastDiv=k,<div style={divStyle}>{k}</div>):null;
+              return<React.Fragment key={item.id}>{divider}{renderShopRow(item)}</React.Fragment>;
             })}
-          </div>
-        </div>;
-      })}
+          </div></div>;
+        }
+        // A-Z: group by store
+        return Object.entries(byStore).map(([storeName,items])=>{
+          if(!items.length)return null;
+          const sorted=sortItems(items);
+          return<div key={storeName}style={{marginBottom:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>{storeName}</div>
+            <div className="card"style={{padding:0,overflow:'hidden'}}>{sorted.map(renderShopRow)}</div>
+          </div>;
+        });
+      })()}
       {pickedUp.filter(id=>needed.includes(id)).length>0&&<div>
         <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:5}}>In Cart ✓</div>
         <div className="card"style={{padding:0,overflow:'hidden'}}>
