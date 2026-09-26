@@ -3892,7 +3892,24 @@ function ShoppingTab({state,dispatch,showToast,phase}){
             })}
           </div>;
         }
-        if(sortBy==='recipe')return renderFlat(reviewItems,i=>i.sources[0]||'Other');
+        if(sortBy==='recipe'){
+          // Build per-recipe groups: each item appears under every recipe that uses it
+          const recipeOrder=[...new Set(reviewItems.flatMap(i=>i.sources.length?i.sources:['Other']))].sort((a,b)=>a.localeCompare(b));
+          const byRecipe={};for(const r of recipeOrder)byRecipe[r]=[];
+          for(const item of reviewItems){const srcs=item.sources.length?item.sources:['Other'];for(const s of srcs){if(!byRecipe[s])byRecipe[s]=[];byRecipe[s].push(item);}}
+          return<div className="card"style={{padding:0,overflow:'hidden'}}>
+            {recipeOrder.filter(r=>byRecipe[r].length>0).map(r=><React.Fragment key={r}>
+              <div style={divStyle}>{r}</div>
+              {[...byRecipe[r]].sort((a,b)=>a.name.localeCompare(b.name)).map(item=>{
+                const isKnownIng=state.ingredients.find(i=>i.id===item.id);
+                return<ShopRow key={r+'|'+item.id}showRecipe={false}showQty={showQty}item={item}
+                  checked={needed.includes(item.id)}onCheck={()=>dispatch({type:'TOGGLE_NEED',id:item.id})}showStore={false}
+                  onViewRecipe={onViewRecipe}recipeNames={recipeNames}
+                  onSaveIng={isKnownIng?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/>;
+              })}
+            </React.Fragment>)}
+          </div>;
+        }
         if(sortBy==='aisle')return renderFlat(reviewItems,i=>getAisle(i.name));
         // A-Z: group by store
         const g={"Trader Joe's":[],"Whole Foods":[],"Other":[]};
@@ -3936,12 +3953,23 @@ function ShoppingTab({state,dispatch,showToast,phase}){
             onViewRecipe={onViewRecipe}recipeNames={recipeNames}
             onSaveIng={isKnownIng2?(ing=>{dispatch({type:'SAVE_ING',ing});showToast(`"${ing.name}" updated!`);}) :null}/>;
         }
-        if(sortBy==='recipe'||sortBy==='aisle'){
-          const getKey=sortBy==='recipe'?i=>i.sources[0]||'Other':i=>getAisle(i.name);
+        if(sortBy==='recipe'){
+          // Per-recipe groups: each item appears under every recipe that uses it
+          const recipeOrder=[...new Set(shopItems.flatMap(i=>i.sources.length?i.sources:['Other']))].sort((a,b)=>a.localeCompare(b));
+          const byRecipe={};for(const r of recipeOrder)byRecipe[r]=[];
+          for(const item of shopItems){const srcs=item.sources.length?item.sources:['Other'];for(const s of srcs){if(!byRecipe[s])byRecipe[s]=[];byRecipe[s].push(item);}}
+          return<div style={{marginBottom:12}}><div className="card"style={{padding:0,overflow:'hidden'}}>
+            {recipeOrder.filter(r=>byRecipe[r].length>0).map(r=><React.Fragment key={r}>
+              <div style={divStyle}>{r}</div>
+              {[...byRecipe[r]].sort((a,b)=>a.name.localeCompare(b.name)).map(item=><React.Fragment key={r+'|'+item.id}>{renderShopRow(item)}</React.Fragment>)}
+            </React.Fragment>)}
+          </div></div>;
+        }
+        if(sortBy==='aisle'){
           const sorted=sortItems(shopItems);let lastDiv=null;
           return<div style={{marginBottom:12}}><div className="card"style={{padding:0,overflow:'hidden'}}>
             {sorted.map(item=>{
-              const k=getKey(item);
+              const k=getAisle(item.name);
               const divider=k!==lastDiv?(lastDiv=k,<div style={divStyle}>{k}</div>):null;
               return<React.Fragment key={item.id}>{divider}{renderShopRow(item)}</React.Fragment>;
             })}
