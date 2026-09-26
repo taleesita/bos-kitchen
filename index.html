@@ -787,6 +787,20 @@ function decodeSync(code,cur){
   '7ff464d4-daad-45e1-8457-cb188008c87f':'20d32e91-3c29-4e1b-b602-c06ae5ccd95a', // batch onion/olive/flour cleanup
   '72601aa0-7b90-4560-9160-ce9dae38221d':'1404d402-533e-4f7e-b271-3423c97e2c19', // batch onion/olive/flour cleanup
   '2984838a-60c2-4e07-9a01-45b76a08a7d1':'a1391227-d99b-47b4-bd77-da721ee5cff3', // batch onion/olive/flour cleanup
+  // Batch 9/26: yesterday's merged ingredients — old IDs still in Firebase recOv
+  'ae279306-d24e-4ef4-b48c-4ac0ed17bef5':'80a2431d-6bc0-4e14-b573-e1dd5d29abc0', // Mint (dried)→Dried mint
+  'a6ec5701-c174-4cff-bceb-f2b1fd1b1c91':'13ff6479-fbcf-4735-93d4-c55038bc3f55', // Mozzarella(baby note)→Mozzarella
+  '6d6ec909-2697-4682-ae98-29d4ef6e36b8':'4a0c5af3-ccea-4c3d-8ba1-fecb0f6e9892', // Salt(baby omit)→Salt
+  'bc57a140-0e11-40c0-8a18-38f6ed5ae063':'21ec3a24-6218-4649-bdf3-2e8c64d2f2d8', // Water(hands note)→Water
+  '950f03ff-b85a-4527-b84a-70e31ff45283':'7628f449-1699-44a0-aeab-26b2491df14d', // Brie(mini)→Brie
+  'f108657c-a85d-4699-8048-39a9b0e7e42d':'2c0ee4bc-e3e3-4f45-9a64-e50a5d8bf92b', // Almonds(slivered)→Almonds
+  '3bffd96b-a10e-41fe-bb65-d96cf20d3551':'2ec2498d-7248-4ffe-8f3a-9bce4b673db4', // Chopped Walnuts→Walnuts
+  '7c1a7da7-8adf-4bb5-bfc3-9c10c44fee27':'2b8ce5c1-b601-4f77-a77c-1e16c6b9d6fd', // Fresh basil→Basil
+  '6906074c-0b5e-4abc-b25b-bbd96eb56cbf':'24b93d98-70a2-4c2d-b0be-a5f92f82e649', // Dried Thyme→Thyme
+  'cfffe467-bba5-498a-a73e-b5adcb5b4be5':'54d23a1e-0b7c-4a1f-bfcb-47c92a87c25b', // Dried Rosemary→Rosemary
+  'b2a9e14d-e7cb-4f03-8e9c-1a2b3c4d5e6f':'a3aa1b91-e2e6-4d33-8db4-9f1d86de1d73', // Flaky salt→Salt flakes
+  '9abd5f37-a1b2-c3d4-e5f6-g7h8i9j0k1l2':'33db1b16-0e8d-4b2d-80dc-f2c30eb6b42e', // Unsalted Butter→Butter(unsalted)
+  '31d2ab3f-9957-4b60-a6c5-1bb81774da2b':'a3aa1b91-e2e6-4d33-8db4-9f1d86de1d73', // old flaky sea salt→Salt flakes (was pointing to now-deleted Flaky salt)
   };
   // Combined ingredients that expand to multiple refs
   const EXPAND_MAP={
@@ -881,7 +895,7 @@ function decodeSync(code,cur){
     'oregano':'40345506-2734-417c-ab89-9c4add1e1d61',
     'oregano (dried)':'40345506-2734-417c-ab89-9c4add1e1d61',
     'paprika (hot)':'bca1d4af-341c-4609-b725-a4fb8c829dca',
-    'flaky sea salt':'b2a9e14d-267e-46b8-81b0-d1c03c5bc401',
+    'flaky sea salt':'a3aa1b91-e2e6-4d33-8db4-9f1d86de1d73',
     'sea salt':'4a0c5af3-1af1-45cd-9a1c-7f09cb329cb5',
     'fine sea salt':'4a0c5af3-1af1-45cd-9a1c-7f09cb329cb5',
     "za'atar mix":'4dbcf0e9-f4d9-4192-be19-db659ee25036',
@@ -3735,9 +3749,11 @@ function ShoppingTab({state,dispatch,showToast,phase}){
     for(const day of Object.values(days)){
       for(const slot of SLOTS){
         for(const recId of(day[slot]||[])){
+          if(!recId||typeof recId!=='string')continue;
           if(recId.startsWith('text:'))continue;
           const rec=state.recipes.find(r=>r.id===recId);
           if(rec){for(const ref of(rec.ingredientRefs||[])){
+            if(!ref.id)continue;
             allIds.add(ref.id);
             if(!sources[ref.id])sources[ref.id]=[];
             if(!sources[ref.id].includes(rec.name))sources[ref.id].push(rec.name);
@@ -3780,7 +3796,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
   const needed=state.shopping?.needed||[];
   const pickedUp=state.shopping?.pickedUp||[];
 
-  const reviewItems=useMemo(()=>weekIngs.ids.map(id=>{
+  const reviewItems=useMemo(()=>weekIngs.ids.filter(id=>id!=null).map(id=>{
     if(id.startsWith('misc_')||id.startsWith('noa_')){
       const name=id.slice(id.indexOf('_')+1);
       return{id,name,store:'',sources:weekIngs.sources[id]||[],qtys:[]};
