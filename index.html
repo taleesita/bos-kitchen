@@ -3780,8 +3780,7 @@ function ShoppingTab({state,dispatch,showToast,phase}){
         return;
       }
       const ingNameLower=item.toLowerCase();
-      const aliasId=Object.entries(NAME_ALIAS).find(([k])=>k===ingNameLower)?.[1];
-      const ing=state.ingredients.find(i=>i.id===(aliasId||'__none__')||i.name.toLowerCase()===ingNameLower);
+      const ing=state.ingredients.find(i=>i.name.toLowerCase()===ingNameLower);
       if(ing){
         // Known ingredient — use its ID so it merges with recipe usage
         allIds.add(ing.id);
