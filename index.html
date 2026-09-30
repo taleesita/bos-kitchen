@@ -1402,7 +1402,10 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   const[url,setUrl]=useState(recipe?.url||'');
   const[sourceUrl,setSourceUrl]=useState(recipe?.sourceUrl||'');
   const[time,setTime]=useState(recipe?.time||'');
-  const[refs,setRefs]=useState(recipe?.ingredientRefs||[]);
+  // Filter out unresolvable ingredient refs (orphaned IDs not in ingredient DB)
+  const[refs,setRefs]=useState(()=>(recipe?.ingredientRefs||[]).filter(ref=>
+    ref.section||ingredients.find(i=>i.id===ref.id)
+  ));
   const[tags,setTags]=useState(recipe?.tags||[]);
   const[tagInput,setTagInput]=useState('');
   const[tagDdOpen,setTagDdOpen]=useState(false);
