@@ -1402,10 +1402,10 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   const[url,setUrl]=useState(recipe?.url||'');
   const[sourceUrl,setSourceUrl]=useState(recipe?.sourceUrl||'');
   const[time,setTime]=useState(recipe?.time||'');
-  // Filter out unresolvable ingredient refs (orphaned IDs not in ingredient DB)
+  // Filter out unresolvable ingredient refs; stamp each with a unique row key (_rk)
   const[refs,setRefs]=useState(()=>(recipe?.ingredientRefs||[]).filter(ref=>
     ref.section||ingredients.find(i=>i.id===ref.id)
-  ));
+  ).map(ref=>ref._rk?ref:{...ref,_rk:uid()}));
   const[tags,setTags]=useState(recipe?.tags||[]);
   const[tagInput,setTagInput]=useState('');
   const[tagDdOpen,setTagDdOpen]=useState(false);
@@ -1447,12 +1447,16 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   }
   const allIngs=useMemo(()=>[...ingredients,...newIngs],[ingredients,newIngs]);
   const ingName=id=>(allIngs.find(i=>i.id===id)||{}).name||'?';
-  function handleIngChange(newRefs,newIng){setRefs(newRefs);if(newIng)setNewIngs(n=>[...n,newIng]);}
-  function rmRef(id){setRefs(r=>r.filter(x=>x.id!==id));}
-  function updQty(id,qty){setRefs(r=>r.map(x=>x.id===id?{...x,quantity:qty}:x));}
-  function addSection(){setRefs(r=>[...r,{section:'For the …',id:'sec-'+uid()}]);}
-  function updSection(id,label){setRefs(r=>r.map(x=>x.id===id?{...x,section:label}:x));}
-  function save(){if(!name.trim())return;const inst=instructions.split('\n').map(s=>s.trim()).filter(Boolean);const tMin=parseInt(time)||null;const nl=noaLabel.trim().toUpperCase()||undefined;if(nl){const dup=(allRecipes||[]).some(r=>r.id!==(recipe?.id)&&r.noaLabel&&r.noaLabel.toUpperCase()===nl);if(dup){setNoaLabelError(true);return;}}const nc=noaCategory.trim()||undefined;onSave({id:recipe?.id||uid(),name:name.trim(),holiday,url,sourceUrl:sourceUrl||undefined,tags,ingredientRefs:refs,instructions:inst,imageUrl:imageUrl||undefined,servings:recipe?.servings,...(tMin?{time:tMin}:{}),...(nl?{noaLabel:nl}:{noaLabel:undefined}),...(nc?{noaCategory:nc}:{noaCategory:undefined})},newIngs);}
+  function handleIngChange(newRefs,newIng){
+    // Stamp any new refs (those without _rk) with a unique row key
+    setRefs(newRefs.map(ref=>ref._rk?ref:{...ref,_rk:uid()}));
+    if(newIng)setNewIngs(n=>[...n,newIng]);
+  }
+  function rmRef(rk){setRefs(r=>r.filter(x=>x._rk!==rk));}
+  function updQty(rk,qty){setRefs(r=>r.map(x=>x._rk===rk?{...x,quantity:qty}:x));}
+  function addSection(){setRefs(r=>[...r,{section:'For the …',id:'sec-'+uid(),_rk:'sec-'+uid()}]);}
+  function updSection(rk,label){setRefs(r=>r.map(x=>x._rk===rk?{...x,section:label}:x));}
+  function save(){if(!name.trim())return;const inst=instructions.split('\n').map(s=>s.trim()).filter(Boolean);const tMin=parseInt(time)||null;const nl=noaLabel.trim().toUpperCase()||undefined;if(nl){const dup=(allRecipes||[]).some(r=>r.id!==(recipe?.id)&&r.noaLabel&&r.noaLabel.toUpperCase()===nl);if(dup){setNoaLabelError(true);return;}}const nc=noaCategory.trim()||undefined;const cleanRefs=refs.map(({_rk,...rest})=>rest);onSave({id:recipe?.id||uid(),name:name.trim(),holiday,url,sourceUrl:sourceUrl||undefined,tags,ingredientRefs:cleanRefs,instructions:inst,imageUrl:imageUrl||undefined,servings:recipe?.servings,...(tMin?{time:tMin}:{}),...(nl?{noaLabel:nl}:{noaLabel:undefined}),...(nc?{noaCategory:nc}:{noaCategory:undefined})},newIngs);}
   return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget&&!editing)onClose();}}>
     <div className="modal">
       <div className="mhdr"><div className="mtitle">{isNew?'New Recipe':'Edit Recipe'}</div><button className="mclose"onClick={onClose}>×</button></div>
@@ -1524,19 +1528,19 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
         <label className="lbl">Ingredients</label>
         <table style={{width:'100%',borderCollapse:'collapse',marginBottom:6}}>
           {refs.map((ref,i)=>{
-            if(ref.section)return<tr key={ref.id}data-irow={i}style={{borderBottom:'1px solid var(--border)',opacity:dragIdx===i?0.35:1,background:dragOverIdx===i&&dragIdx!==i?'var(--sage-light)':'#f0f7f0',transition:'background .1s'}}>
+            if(ref.section)return<tr key={ref._rk||ref.id}data-irow={i}style={{borderBottom:'1px solid var(--border)',opacity:dragIdx===i?0.35:1,background:dragOverIdx===i&&dragIdx!==i?'var(--sage-light)':'#f0f7f0',transition:'background .1s'}}>
               <td style={{padding:'4px 4px',width:'5%',cursor:'grab',color:'var(--muted)',fontSize:15,lineHeight:1,userSelect:'none',touchAction:'none'}}onPointerDown={e=>startIngDrag(e,i)}>⠿</td>
               <td colSpan={2}style={{padding:'4px 4px'}}>
                 <input style={{width:'100%',border:'1px solid var(--sage-light)',borderRadius:'var(--r-sm)',background:'#e8f5e9',fontSize:11,padding:'2px 6px',color:'var(--sage-dark)',fontWeight:600}}
-                  value={ref.section}onChange={e=>updSection(ref.id,e.target.value)}placeholder="Section name…"/>
+                  value={ref.section}onChange={e=>updSection(ref._rk,e.target.value)}placeholder="Section name…"/>
               </td>
-              <td style={{padding:'4px 2px',textAlign:'center',width:'5%'}}><button style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13,lineHeight:1}}onClick={()=>rmRef(ref.id)}>×</button></td>
+              <td style={{padding:'4px 2px',textAlign:'center',width:'5%'}}><button style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13,lineHeight:1}}onClick={()=>rmRef(ref._rk)}>×</button></td>
             </tr>;
-            return<tr key={ref.id}data-irow={i}style={{borderBottom:'1px solid var(--border)',opacity:dragIdx===i?0.35:1,background:dragOverIdx===i&&dragIdx!==i?'var(--sage-light)':'transparent',transition:'background .1s'}}>
+            return<tr key={ref._rk||ref.id}data-irow={i}style={{borderBottom:'1px solid var(--border)',opacity:dragIdx===i?0.35:1,background:dragOverIdx===i&&dragIdx!==i?'var(--sage-light)':'transparent',transition:'background .1s'}}>
               <td style={{padding:'4px 4px',width:'5%',cursor:'grab',color:'var(--muted)',fontSize:15,lineHeight:1,userSelect:'none',touchAction:'none'}}onPointerDown={e=>startIngDrag(e,i)}>⠿</td>
               <td style={{padding:'4px 6px',fontSize:12,color:'var(--text)',width:'55%'}}>{ingName(ref.id)}</td>
-              <td style={{padding:'4px 4px',width:'35%'}}><input style={{width:'100%',border:'1px solid var(--border)',borderRadius:'var(--r-sm)',background:'var(--cream)',fontSize:11,padding:'2px 5px',color:'var(--text)'}}value={ref.quantity}onChange={e=>updQty(ref.id,e.target.value)}placeholder="qty…"/></td>
-              <td style={{padding:'4px 2px',textAlign:'center',width:'5%'}}><button style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13,lineHeight:1}}onClick={()=>rmRef(ref.id)}>×</button></td>
+              <td style={{padding:'4px 4px',width:'35%'}}><input style={{width:'100%',border:'1px solid var(--border)',borderRadius:'var(--r-sm)',background:'var(--cream)',fontSize:11,padding:'2px 5px',color:'var(--text)'}}value={ref.quantity}onChange={e=>updQty(ref._rk,e.target.value)}placeholder="qty…"/></td>
+              <td style={{padding:'4px 2px',textAlign:'center',width:'5%'}}><button style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13,lineHeight:1}}onClick={()=>rmRef(ref._rk)}>×</button></td>
             </tr>;
           })}
         </table>
