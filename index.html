@@ -1354,7 +1354,7 @@ function IngDrop({ingredients,selected,onChange,placeholder='Add ingredient…'}
       const newIng={id:uid(),name:item.label,store:''};
       onChange([...selected,{id:newIng.id,quantity:''}],newIng);
     }else{
-      if(!selected.find(s=>s.id===item.id))onChange([...selected,{id:item.id,quantity:''}]);
+      onChange([...selected,{id:item.id,quantity:''}]);
     }
   }
   return<SearchDrop items={items}onSelect={handleSelect}placeholder={placeholder}allowNew={true}/>;
