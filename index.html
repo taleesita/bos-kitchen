@@ -2046,7 +2046,11 @@ function RecipeViewModal({recipe,ingredients,onEdit,onDuplicate,onClose,dispatch
       const qty=displayQty(ref.quantity);
       return`<li>${ingEmoji(ing.name)} <strong>${ing.name}</strong>${qty?': <em>'+qty+'</em>':''}</li>`;
     }).filter(Boolean).join('');
-    const stepsHtml=(recipe.instructions||[]).map((s,i)=>`<li>${convertStepText(s)}</li>`).join('');
+    let stepNum=0;
+    const stepsHtml=(recipe.instructions||[]).map(s=>{
+      if(s.startsWith('#')){const label=s.replace(/^#+\s*/,'');return`</ol><h3 style="font-size:11px;font-weight:700;color:#5a7e5e;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 4px;">${label}</h3><ol style="counter-reset:step ${stepNum};">`;}
+      stepNum++;return`<li>${convertStepText(s)}</li>`;
+    }).join('');
     const imgHtml=recipe.imageUrl?`<img src="${proxyImg(recipe.imageUrl)}" style="max-width:180px;border-radius:8px;float:right;margin:0 0 12px 16px">`:'' ;
     const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${recipe.name}</title><style>
       body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:580px;margin:40px auto;padding:20px;color:#2d2d2d;line-height:1.5;}
@@ -2054,6 +2058,7 @@ function RecipeViewModal({recipe,ingredients,onEdit,onDuplicate,onClose,dispatch
       .meta{color:#5a7e5e;font-size:12px;margin-bottom:4px;}
       .src{font-size:11px;color:#999;margin-bottom:16px;}
       h2{font-size:12px;font-weight:700;color:#7a7a7a;text-transform:uppercase;letter-spacing:.5px;margin:18px 0 6px;border-bottom:1px solid #eee;padding-bottom:4px;}
+      h3{font-size:11px;font-weight:700;color:#5a7e5e;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 4px;}
       ul,ol{padding-left:18px;margin:0;}li{margin-bottom:5px;font-size:13px;}
       @media print{body{margin:0;max-width:100%;}}</style></head>
     <body>${imgHtml}<h1>${recipe.name}</h1>
@@ -2073,8 +2078,8 @@ function RecipeViewModal({recipe,ingredients,onEdit,onDuplicate,onClose,dispatch
       const ing=ingredients.find(i=>i.id===ref.id);if(!ing)return'';
       const qty=displayQty(ref.quantity);return`• ${ing.name}${qty?': '+qty:''}`;
     }).filter(Boolean).join('\n');
-    const steps=(recipe.instructions||[]).map((s,i)=>`${i+1}. ${convertStepText(s)}`).join('\n');
-    const parts=[recipe.name,tags&&`(${tags})`,recipe.sourceUrl&&`${sourceLinkLabel(recipe.sourceUrl)}: ${recipe.sourceUrl}`,recipe.url&&`${sourceLinkLabel(recipe.url)}: ${recipe.url}`,'',ings&&'Ingredients:\n'+ings,'',steps&&'Instructions:\n'+steps];
+    let sn=0;const steps=(recipe.instructions||[]).map(s=>s.startsWith('#')?'\n'+s.replace(/^#+\s*/,'').toUpperCase()+':':` ${++sn}. ${convertStepText(s)}`).join('\n');
+    const parts=[recipe.name,tags&&`(${tags})`,recipe.sourceUrl&&`${sourceLinkLabel(recipe.sourceUrl)}: ${recipe.sourceUrl}`,recipe.url&&`${sourceLinkLabel(recipe.url)}: ${recipe.url}`,'',ings&&'Ingredients:\n'+ings,'',steps&&'Instructions:'+steps];
     navigator.clipboard.writeText(parts.filter(Boolean).join('\n').trim())
       .then(()=>{showToast&&showToast('Recipe copied to clipboard!');setSharing(false);});
   }
@@ -2085,8 +2090,8 @@ function RecipeViewModal({recipe,ingredients,onEdit,onDuplicate,onClose,dispatch
       const ing=ingredients.find(i=>i.id===ref.id);if(!ing)return'';
       const qty=displayQty(ref.quantity);return`• ${ing.name}${qty?': '+qty:''}`;
     }).filter(Boolean).join('\n');
-    const steps=(recipe.instructions||[]).map((s,i)=>`${i+1}. ${convertStepText(s)}`).join('\n');
-    const parts=[recipe.name,tags&&`(${tags})`,recipe.sourceUrl&&`${sourceLinkLabel(recipe.sourceUrl)}: ${recipe.sourceUrl}`,recipe.url&&`${sourceLinkLabel(recipe.url)}: ${recipe.url}`,'',ings&&'Ingredients:\n'+ings,'',steps&&'Instructions:\n'+steps];
+    let sn2=0;const steps=(recipe.instructions||[]).map(s=>s.startsWith('#')?'\n'+s.replace(/^#+\s*/,'').toUpperCase()+':':` ${++sn2}. ${convertStepText(s)}`).join('\n');
+    const parts=[recipe.name,tags&&`(${tags})`,recipe.sourceUrl&&`${sourceLinkLabel(recipe.sourceUrl)}: ${recipe.sourceUrl}`,recipe.url&&`${sourceLinkLabel(recipe.url)}: ${recipe.url}`,'',ings&&'Ingredients:\n'+ings,'',steps&&'Instructions:'+steps];
     const body=parts.filter(Boolean).join('\n').trim();
     window.location.href=`mailto:?subject=${encodeURIComponent(recipe.name)}&body=${encodeURIComponent(body)}`;
   }
