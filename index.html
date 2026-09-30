@@ -1550,8 +1550,8 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
         </div>
       </div>
       <div className="fg">
-        <label className="lbl">Instructions <span style={{fontSize:10,color:'var(--muted)',fontWeight:400,textTransform:'none'}}>(one step per line)</span></label>
-        <textarea className="inp"style={{minHeight:110,fontSize:12,lineHeight:1.55}}value={instructions}onChange={e=>setInstructions(e.target.value)}placeholder="Step 1&#10;Step 2&#10;Step 3…"/>
+        <label className="lbl">Instructions <span style={{fontSize:10,color:'var(--muted)',fontWeight:400,textTransform:'none'}}>(one step per line — start a line with # for a section header)</span></label>
+        <textarea className="inp"style={{minHeight:110,fontSize:12,lineHeight:1.55}}value={instructions}onChange={e=>setInstructions(e.target.value)}placeholder="# Dough&#10;Step 1&#10;Step 2&#10;# Filling&#10;Step 3…"/>
       </div>
       <hr className="divider"/>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
@@ -2202,12 +2202,20 @@ function RecipeViewModal({recipe,ingredients,onEdit,onDuplicate,onClose,dispatch
             Instructions
             {ingNames.length>0&&<span style={{fontSize:10,color:'#7a5500',background:'#fff8e8',border:'1px solid #f0c040',borderRadius:10,padding:'1px 7px',fontWeight:500,textTransform:'none',letterSpacing:0}}>Tap ingredient to see qty</span>}
           </div>
-          {(recipe.instructions||[]).map((step,i)=><div key={i}className="inst-step">
-            <div className="inst-num">{i+1}</div>
-            <div className="inst-text" style={translated?{direction:'ltr'}:{}}>
-              {translated?convertStepText(translated.instructions[i]||step):renderStep(convertStepText(step))}
-            </div>
-          </div>)}
+          {(()=>{let stepNum=0;return(recipe.instructions||[]).map((step,i)=>{
+            const isHeader=step.startsWith('#');
+            if(isHeader){
+              const label=step.replace(/^#+\s*/,'');
+              return<div key={i}style={{fontSize:11,fontWeight:700,color:'var(--sage-dark)',textTransform:'uppercase',letterSpacing:.5,padding:'10px 0 3px',borderBottom:'2px solid var(--sage-light)',marginTop:i===0?0:6}}>{label}</div>;
+            }
+            stepNum++;
+            return<div key={i}className="inst-step">
+              <div className="inst-num">{stepNum}</div>
+              <div className="inst-text" style={translated?{direction:'ltr'}:{}}>
+                {translated?convertStepText(translated.instructions[i]||step):renderStep(convertStepText(step))}
+              </div>
+            </div>;
+          });})()}
         </div>}
         {!hasIngs&&!hasInst&&<div className="empty"style={{marginTop:12}}><div className="empty-icon">📝</div>No details yet. Edit to add ingredients and instructions.</div>}
         {/* Add to plan */}
