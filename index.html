@@ -3182,12 +3182,6 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
   // Add recipe or text-entry to a slot (doesn't close adder — user can keep adding)
   function addRec(day,slot,rec){
     dispatch({type:'MEAL_ADD_REC',day,slot,recId:rec.id});
-    if(rec.id.startsWith('text:')){
-      const label=rec.id.slice(5);
-      const existsIng=state.ingredients.find(i=>i.name.toLowerCase()===label.toLowerCase());
-      const existsRec=state.recipes.find(r=>r.name.toLowerCase()===label.toLowerCase());
-      if(!existsIng&&!existsRec)dispatch({type:'SAVE_ING',ing:{id:uid(),name:label,store:''}});
-    }
   }
   function rmRec(day,slot,item){dispatch({type:'MEAL_RM_REC',day,slot,recId:item});}
   function addMulti(type,items){items.forEach(item=>dispatch({type,item}));showToast(`${items.length} items added!`);}
