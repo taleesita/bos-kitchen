@@ -5703,7 +5703,10 @@ function App({user,onSignOut}){
     }
     localStorage.removeItem('kitchen_local');
     localStorage.setItem('kitchen_data_ver',String(DATA_VER));
-    return buildInitial();
+    // For Firebase users: seed the meal plan from cache so calendar isn't blank while FB loads
+    const init=buildInitial();
+    try{const mp=localStorage.getItem('kitchen_mp_cache');if(mp)init.mealPlan=JSON.parse(mp);}catch(e){}
+    return init;
   });
   const[toast,setToast]=useState(null);
   const[showSync,setShowSync]=useState(false);
@@ -5740,6 +5743,8 @@ function App({user,onSignOut}){
     stateRef.current=state; // keep ref in sync for async callbacks
     // Always persist overrides immediately — read synchronously by Firebase listener to survive fast refreshes
     try{const _ov=getUserData(state);localStorage.setItem('kitchen_overrides',JSON.stringify({recOv:_ov.recOv,ingOv:_ov.ingOv}));}catch(e){}
+    // Always cache meal plan so calendar loads instantly next visit (even for Firebase users)
+    try{if(state.mealPlan)localStorage.setItem('kitchen_mp_cache',JSON.stringify(state.mealPlan));}catch(e){}
     if(isFirst.current){isFirst.current=false;return;}
     // Only write full state to localStorage when Firebase is NOT configured (offline/QR mode).
     // When Firebase is active it is the source of truth — writing 1.5MB here fills the quota.
