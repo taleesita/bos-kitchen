@@ -951,9 +951,17 @@ function decodeSync(code,cur){
         const sid=seedIngByName[cname]||NAME_ALIAS[cname];
         if(sid)return[{...ref,id:sid}];
       }
-      // 2) Positional fallback: use SEED's ref at same position
+      // 2) Name saved alongside ref (ingName field) — try to auto-heal
+      const savedName=(ref.ingName||'').toLowerCase().trim();
+      if(savedName){
+        const sid=seedIngByName[savedName]||NAME_ALIAS[savedName];
+        if(sid)return[{...ref,id:sid}];
+      }
+      // 3) Positional fallback: use SEED's ref at same position
       const sr=seedNonSect[idx];
       if(sr&&knownIngIds.has(sr.id))return[{...sr,quantity:ref.quantity||sr.quantity}];
+      // 4) Keep as-is with ingName for display context in edit form
+      if(savedName)return[ref];
       return[];
     });
   }
@@ -1403,10 +1411,9 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   const[url,setUrl]=useState(recipe?.url||'');
   const[sourceUrl,setSourceUrl]=useState(recipe?.sourceUrl||'');
   const[time,setTime]=useState(recipe?.time||'');
-  // Filter out unresolvable ingredient refs; stamp each with a unique row key (_rk)
-  const[refs,setRefs]=useState(()=>(recipe?.ingredientRefs||[]).filter(ref=>
-    ref.section||ingredients.find(i=>i.id===ref.id)
-  ).map(ref=>ref._rk?ref:{...ref,_rk:uid()}));
+  // Keep all refs (including unresolvable ones); stamp each with a unique row key (_rk)
+  const[refs,setRefs]=useState(()=>(recipe?.ingredientRefs||[]).map(ref=>ref._rk?ref:{...ref,_rk:uid()}));
+  const[fixingRk,setFixingRk]=useState(null); // _rk of the ref currently being replaced
   const[tags,setTags]=useState(recipe?.tags||[]);
   const[tagInput,setTagInput]=useState('');
   const[tagDdOpen,setTagDdOpen]=useState(false);
@@ -1457,7 +1464,13 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
   function updQty(rk,qty){setRefs(r=>r.map(x=>x._rk===rk?{...x,quantity:qty}:x));}
   function addSection(){setRefs(r=>[...r,{section:'For the …',id:'sec-'+uid(),_rk:'sec-'+uid()}]);}
   function updSection(rk,label){setRefs(r=>r.map(x=>x._rk===rk?{...x,section:label}:x));}
-  function save(){if(!name.trim())return;const inst=instructions.split('\n').map(s=>s.trim()).filter(Boolean);const tMin=parseInt(time)||null;const nl=noaLabel.trim().toUpperCase()||undefined;if(nl){const dup=(allRecipes||[]).some(r=>r.id!==(recipe?.id)&&r.noaLabel&&r.noaLabel.toUpperCase()===nl);if(dup){setNoaLabelError(true);return;}}const nc=noaCategory.trim()||undefined;const cleanRefs=refs.map(({_rk,...rest})=>rest);onSave({id:recipe?.id||uid(),name:name.trim(),holiday,url,sourceUrl:sourceUrl||undefined,tags,ingredientRefs:cleanRefs,instructions:inst,imageUrl:imageUrl||undefined,servings:recipe?.servings,...(tMin?{time:tMin}:{}),...(nl?{noaLabel:nl}:{noaLabel:undefined}),...(nc?{noaCategory:nc}:{noaCategory:undefined})},newIngs);}
+  function save(){if(!name.trim())return;const inst=instructions.split('\n').map(s=>s.trim()).filter(Boolean);const tMin=parseInt(time)||null;const nl=noaLabel.trim().toUpperCase()||undefined;if(nl){const dup=(allRecipes||[]).some(r=>r.id!==(recipe?.id)&&r.noaLabel&&r.noaLabel.toUpperCase()===nl);if(dup){setNoaLabelError(true);return;}}const nc=noaCategory.trim()||undefined;
+    // Strip _rk; save name alongside id so stale IDs can be identified later
+    const cleanRefs=refs.filter(ref=>ref.section||ingName(ref.id)!=='?').map(({_rk,...rest})=>{
+      if(rest.section)return rest;
+      const n=ingName(rest.id);return n&&n!=='?'?{...rest,ingName:n}:rest;
+    });
+    onSave({id:recipe?.id||uid(),name:name.trim(),holiday,url,sourceUrl:sourceUrl||undefined,tags,ingredientRefs:cleanRefs,instructions:inst,imageUrl:imageUrl||undefined,servings:recipe?.servings,...(tMin?{time:tMin}:{}),...(nl?{noaLabel:nl}:{noaLabel:undefined}),...(nc?{noaCategory:nc}:{noaCategory:undefined})},newIngs);}
   return<div className="overlay"onClick={e=>{if(e.target===e.currentTarget&&!editing)onClose();}}>
     <div className="modal">
       <div className="mhdr"><div className="mtitle">{isNew?'New Recipe':'Edit Recipe'}</div><button className="mclose"onClick={onClose}>×</button></div>
@@ -1537,12 +1550,32 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
               </td>
               <td style={{padding:'4px 2px',textAlign:'center',width:'5%'}}><button style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13,lineHeight:1}}onClick={()=>rmRef(ref._rk)}>×</button></td>
             </tr>;
-            return<tr key={ref._rk||ref.id}data-irow={i}style={{borderBottom:'1px solid var(--border)',opacity:dragIdx===i?0.35:1,background:dragOverIdx===i&&dragIdx!==i?'var(--sage-light)':'transparent',transition:'background .1s'}}>
-              <td style={{padding:'4px 4px',width:'5%',cursor:'grab',color:'var(--muted)',fontSize:15,lineHeight:1,userSelect:'none',touchAction:'none'}}onPointerDown={e=>startIngDrag(e,i)}>⠿</td>
-              <td style={{padding:'4px 6px',fontSize:12,color:'var(--text)',width:'55%'}}>{ingName(ref.id)}</td>
-              <td style={{padding:'4px 4px',width:'35%'}}><input style={{width:'100%',border:'1px solid var(--border)',borderRadius:'var(--r-sm)',background:'var(--cream)',fontSize:11,padding:'2px 5px',color:'var(--text)'}}value={ref.quantity}onChange={e=>updQty(ref._rk,e.target.value)}placeholder="qty…"/></td>
-              <td style={{padding:'4px 2px',textAlign:'center',width:'5%'}}><button style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13,lineHeight:1}}onClick={()=>rmRef(ref._rk)}>×</button></td>
-            </tr>;
+            {(()=>{
+              const name=ingName(ref.id);
+              const unknown=name==='?';
+              if(unknown&&fixingRk===ref._rk){
+                // Inline picker to replace the unresolvable ingredient
+                return<tr key={ref._rk}data-irow={i}style={{borderBottom:'1px solid var(--border)',background:'#fff8e8'}}>
+                  <td colSpan={3}style={{padding:'4px 6px'}}>
+                    <IngDrop ingredients={allIngs}selected={[]}onChange={(newRefs)=>{
+                      if(newRefs.length){setRefs(r=>r.map(x=>x._rk===ref._rk?{...x,id:newRefs[newRefs.length-1].id}:x));}
+                      setFixingRk(null);
+                    }}/>
+                  </td>
+                  <td style={{padding:'4px 2px',textAlign:'center'}}><button style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13}}onClick={()=>setFixingRk(null)}>✕</button></td>
+                </tr>;
+              }
+              return<tr key={ref._rk||ref.id}data-irow={i}style={{borderBottom:'1px solid var(--border)',opacity:dragIdx===i?0.35:1,background:unknown?'#fff8e8':dragOverIdx===i&&dragIdx!==i?'var(--sage-light)':'transparent',transition:'background .1s'}}>
+                <td style={{padding:'4px 4px',width:'5%',cursor:'grab',color:'var(--muted)',fontSize:15,lineHeight:1,userSelect:'none',touchAction:'none'}}onPointerDown={e=>startIngDrag(e,i)}>⠿</td>
+                <td style={{padding:'4px 6px',fontSize:12,width:'55%'}}>
+                  {unknown
+                    ?<button onClick={()=>setFixingRk(ref._rk)}style={{background:'none',border:'1px solid #f0c040',borderRadius:4,padding:'1px 7px',color:'#7a5500',fontSize:12,cursor:'pointer'}}>⚠ {ref.ingName||'unknown'} — tap to fix</button>
+                    :<span style={{color:'var(--text)'}}>{name}</span>}
+                </td>
+                <td style={{padding:'4px 4px',width:'35%'}}><input style={{width:'100%',border:'1px solid var(--border)',borderRadius:'var(--r-sm)',background:'var(--cream)',fontSize:11,padding:'2px 5px',color:'var(--text)'}}value={ref.quantity}onChange={e=>updQty(ref._rk,e.target.value)}placeholder="qty…"/></td>
+                <td style={{padding:'4px 2px',textAlign:'center',width:'5%'}}><button style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13,lineHeight:1}}onClick={()=>rmRef(ref._rk)}>×</button></td>
+              </tr>;
+            })()}
           })}
         </table>
         <div style={{display:'flex',gap:6,marginBottom:6}}>
