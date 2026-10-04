@@ -5678,7 +5678,33 @@ function App({user,onSignOut}){
     return TAB_IDS.includes(h)?h:NANNY_EMAILS.includes(user?.email||'')?'noa':'mealplan';
   });
   useEffect(()=>{if(!location.hash.startsWith('#plan='))history.replaceState(null,'','#'+tab);},[tab]);
-  const[state,dispatch]=useReducer(reducer,null);
+  const[state,dispatch]=useReducer(reducer,null,()=>{
+    // Synchronous init — runs before first render so the calendar is never blank
+    if(localStorage.getItem('kitchen_fb_url')){
+      localStorage.removeItem('kitchen_local');
+    }
+    const savedVer=localStorage.getItem('kitchen_data_ver');
+    const saved=localStorage.getItem('kitchen_local');
+    if(saved&&savedVer===String(DATA_VER)){
+      try{
+        const parsed=JSON.parse(saved);
+        function _mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
+        const customRecs=(parsed.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id));
+        const customIngs=(parsed.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id));
+        const parsedRecById=new Map((parsed.recipes||[]).map(r=>[r.id,r]));
+        const _seedRecs=(window.SEED.recipes||[]).map(r=>parsedRecById.get(r.id)||r);
+        const parsedIngById=new Map((parsed.ingredients||[]).map(i=>[i.id,i]));
+        const _seedIngs=(window.SEED.ingredients||[]).map(i=>parsedIngById.get(i.id)||i);
+        parsed.recipes=[..._seedRecs,..._mergeById([],customRecs)];
+        parsed.ingredients=[..._seedIngs,..._mergeById([],customIngs)];
+        parsed.noaRoster=[...new Set([...NOA_SEED_ROSTER,...(Array.isArray(parsed.noaRoster)?parsed.noaRoster:[])])];
+        return parsed;
+      }catch(e){}
+    }
+    localStorage.removeItem('kitchen_local');
+    localStorage.setItem('kitchen_data_ver',String(DATA_VER));
+    return buildInitial();
+  });
   const[toast,setToast]=useState(null);
   const[showSync,setShowSync]=useState(false);
   const[showSettings,setShowSettings]=useState(false);
@@ -5707,41 +5733,6 @@ function App({user,onSignOut}){
   const fbInitialized=useRef(false); // true after first Firebase value is processed (data or empty)
   const stateRef=useRef(null); // always-current state for use inside async callbacks
 
-
-  // Load from localStorage on mount — clears stale data if DATA_VER changed
-  useEffect(()=>{
-    // If Firebase is configured, kitchen_local is redundant — remove it to free quota space
-    if(localStorage.getItem('kitchen_fb_url')){
-      localStorage.removeItem('kitchen_local');
-    }
-    const savedVer=localStorage.getItem('kitchen_data_ver');
-    const saved=localStorage.getItem('kitchen_local');
-    if(saved&&savedVer===String(DATA_VER)){
-      try{
-        const parsed=JSON.parse(saved);
-        // Always rebuild recipes/ingredients from current SEED so newly-added seed
-        // items (like Noa recipes) appear immediately without waiting for Firebase sync.
-        function _mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
-        const customRecs=(parsed.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id));
-        const customIngs=(parsed.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id));
-        // Preserve user-edited seed recipes (use parsed version if present, else add new seed item)
-        const parsedRecById=new Map((parsed.recipes||[]).map(r=>[r.id,r]));
-        const _seedRecs=(window.SEED.recipes||[]).map(r=>parsedRecById.get(r.id)||r);
-        // Preserve user-edited seed ingredients (store changes etc.)
-        const parsedIngById=new Map((parsed.ingredients||[]).map(i=>[i.id,i]));
-        const _seedIngs=(window.SEED.ingredients||[]).map(i=>parsedIngById.get(i.id)||i);
-        parsed.recipes=[..._seedRecs,..._mergeById([],customRecs)];
-        parsed.ingredients=[..._seedIngs,..._mergeById([],customIngs)];
-        // Always include NOA_SEED_ROSTER so Noa tab is pre-populated
-        parsed.noaRoster=[...new Set([...NOA_SEED_ROSTER,...(Array.isArray(parsed.noaRoster)?parsed.noaRoster:[])])];
-        dispatch({type:'INIT',state:parsed});return;
-      }catch(e){}
-    }
-    // Version mismatch or corrupt: start fresh with clean seed data
-    localStorage.removeItem('kitchen_local');
-    localStorage.setItem('kitchen_data_ver',String(DATA_VER));
-    dispatch({type:'INIT',state:buildInitial()});
-  },[]);
 
   // Auto-save to localStorage + Firebase
   useEffect(()=>{
