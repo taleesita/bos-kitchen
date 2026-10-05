@@ -478,10 +478,25 @@ function getUserData(state){
     if(rRefs!==sRefs){ov.ingredientRefs=r.ingredientRefs||[];changed=true;}
     if(changed)acc.push(ov);return acc;
   },[]);
+  // Pre-resolve meal plan display names for Scriptable widget
+  const _wDays=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  const _wSlots=['breakfast','lunch','dinner','otherNomz'];
+  const widgetDisplay={};
+  _wDays.forEach(day=>{
+    widgetDisplay[day]={};
+    const d=(state.mealPlan?.days||{})[day]||{};
+    _wSlots.forEach(slot=>{
+      widgetDisplay[day][slot]=(d[slot]||[]).map(item=>{
+        if(!item)return null;
+        if(item.startsWith('text:'))return item.slice(5);
+        return(state.recipes||[]).find(r=>r.id===item)?.name||null;
+      }).filter(Boolean);
+    });
+  });
   return{v:1,mealPlan:state.mealPlan,shopping:state.shopping,holidays:state.holidays||{},
     customRecipes:(state.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id)),
     customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv,recOv,
-    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[],cookPlans:state.cookPlans||{},nextWeek:state.nextWeek||{}};
+    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[],cookPlans:state.cookPlans||{},nextWeek:state.nextWeek||{},widgetDisplay};
 }
 function encodeSync(state){return btoa(unescape(encodeURIComponent(JSON.stringify(getUserData(state)))));}
 function decodeSync(code,cur){
@@ -5823,8 +5838,17 @@ function App({user,onSignOut}){
                 otherNomz:Array.isArray(day.otherNomz)?day.otherNomz:[]
               };
             });
+            // Process quickAdd items from Scriptable widget — merge into misc then clear
+            let baseMisc=Array.isArray(mp.misc)?mp.misc:[];
+            if(ud.quickAdd&&typeof ud.quickAdd==='object'){
+              const newItems=Object.values(ud.quickAdd).map(v=>typeof v==='string'?v:v?.item).filter(s=>typeof s==='string'&&s.trim());
+              if(newItems.length){
+                baseMisc=[...new Set([...baseMisc,...newItems])];
+                db.ref('kitchen/quickAdd').remove();
+              }
+            }
             const safeMp={weekStart:mp.weekStart||initMp.weekStart,days:normDays,
-              misc:Array.isArray(mp.misc)?mp.misc:[],noa:Array.isArray(mp.noa)?mp.noa:[]};
+              misc:baseMisc,noa:Array.isArray(mp.noa)?mp.noa:[]};
             // Merge Firebase overrides with local overrides saved to dedicated localStorage key.
             // Reading localStorage is synchronous so this always has the latest edits,
             // even if the Firebase write timer hadn't fired before the page refresh.
