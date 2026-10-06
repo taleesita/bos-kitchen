@@ -1565,7 +1565,7 @@ function RecipeModal({recipe,ingredients,allRecipes,onSave,onDelete,onClose}){
               </td>
               <td style={{padding:'4px 2px',textAlign:'center',width:'5%'}}><button style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13,lineHeight:1}}onClick={()=>rmRef(ref._rk)}>×</button></td>
             </tr>;
-            {(()=>{
+            return(()=>{
               const name=ingName(ref.id);
               const unknown=name==='?';
               if(unknown&&fixingRk===ref._rk){
