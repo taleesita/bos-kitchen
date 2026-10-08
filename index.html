@@ -6243,9 +6243,19 @@ function App({user,onSignOut}){
               }
               return null; // short enough, treat as legitimate
             };
+            // Collect calendar free-text entry names — these are stored as "text:<name>" in day slots
+            // and should never appear as permanent ingredients
+            const _calFreeTextNames=new Set();
+            Object.values(safeMp.days||{}).forEach(d=>{
+              ['breakfast','lunch','dinner','otherNomz'].forEach(slot=>{
+                (d[slot]||[]).forEach(item=>{if(typeof item==='string'&&item.startsWith('text:')){_calFreeTextNames.add(item.slice(5).toLowerCase());}});
+              });
+            });
             const _cleanCustomIngs=(ud.customIngs||[]).filter(ci=>{
               const sid=_seedNormMap[_normIng(ci.name)];
               if(sid){_customIngRemap[ci.id]=sid;_fbMigrationNeeded=true;return false;}
+              // Remove customIngs that are calendar free-text entries (shouldn't be ingredients)
+              if(_calFreeTextNames.has(ci.name.toLowerCase())){_fbMigrationNeeded=true;console.log('[migration] Removing calendar free-text entry from customIngs:',ci.name);return false;}
               // Junk extraction: malformed names from bad Recime imports
               const extracted=_extractFromJunk(ci.name);
               if(extracted!==null){
