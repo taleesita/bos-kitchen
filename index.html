@@ -496,7 +496,9 @@ function getUserData(state){
   return{v:1,mealPlan:state.mealPlan,shopping:state.shopping,holidays:state.holidays||{},
     customRecipes:(state.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id)),
     customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv,recOv,
-    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[],cookPlans:state.cookPlans||{},nextWeek:state.nextWeek||{},widgetDisplay};
+    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[],cookPlans:state.cookPlans||{},nextWeek:state.nextWeek||{},widgetDisplay,
+    // name→id map for Scriptable widget ingredient picker (keys with Firebase-forbidden chars stripped)
+    ingredientMap:Object.fromEntries((state.ingredients||[]).filter(i=>i.name&&!/[.#$/\[\]]/.test(i.name)).map(i=>[i.name,i.id]))};
 }
 function encodeSync(state){return btoa(unescape(encodeURIComponent(JSON.stringify(getUserData(state)))));}
 function decodeSync(code,cur){
@@ -5842,10 +5844,21 @@ function App({user,onSignOut}){
             });
             // Process quickAdd items from Scriptable widget — merge into misc then clear
             let baseMisc=Array.isArray(mp.misc)?mp.misc:[];
+            let _qaNeededIds=[]; // ingredient IDs to auto-add to shopping.needed
             if(ud.quickAdd&&typeof ud.quickAdd==='object'){
-              const newItems=Object.values(ud.quickAdd).map(v=>typeof v==='string'?v:v?.item).filter(s=>typeof s==='string'&&s.trim());
-              if(newItems.length){
-                baseMisc=[...new Set([...baseMisc,...newItems])];
+              const qVals=Object.values(ud.quickAdd).filter(Boolean);
+              const newMisc=[];
+              qVals.forEach(v=>{
+                if(typeof v==='string'&&v.trim()){newMisc.push(v.trim());}
+                else if(v&&typeof v==='object'){
+                  const name=(v.name||v.item||'').trim();
+                  const id=typeof v.id==='string'&&v.id.length>10?v.id:'';
+                  if(name)newMisc.push(name);
+                  if(id)_qaNeededIds.push(id);
+                }
+              });
+              if(newMisc.length||_qaNeededIds.length){
+                baseMisc=[...new Set([...baseMisc,...newMisc])];
                 db.ref('kitchen/quickAdd').remove();
               }
             }
@@ -6291,11 +6304,15 @@ function App({user,onSignOut}){
             // ── End migrations ───────────────────────────────────────────────────
             function mergeById(a,b){const m={};[...a,...b].forEach(x=>{m[x.id]=x;});return Object.values(m);}
             const safeShopping=ud.shopping||{needed:[],pickedUp:[]};
+            const _baseNeeded=Array.isArray(safeShopping.needed)?safeShopping.needed:[];
+            const _fullNeeded=_qaNeededIds.length?[...new Set([..._baseNeeded,..._qaNeededIds])]:_baseNeeded;
+            // Write new needed IDs back to Firebase so other devices see them immediately
+            if(_qaNeededIds.length&&db){setTimeout(()=>{try{db.ref('kitchen/shopping/needed').set(_fullNeeded);}catch(e){}},800);}
             const newState={
               recipes:[...seedRecs,...mergeById([],ud.customRecipes||[])],
               ingredients:[...seedIngs,...mergeById([],_cleanCustomIngs2)],
               mealPlan:safeMp,
-              shopping:{needed:Array.isArray(safeShopping.needed)?safeShopping.needed:[],
+              shopping:{needed:_fullNeeded,
                 pickedUp:Array.isArray(safeShopping.pickedUp)?safeShopping.pickedUp:[]},
               holidays:ud.holidays||{},
               // Always include the Noa seed roster so pre-loaded recipes appear on all devices
