@@ -498,7 +498,9 @@ function getUserData(state){
     customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv,recOv,
     noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[],cookPlans:state.cookPlans||{},nextWeek:state.nextWeek||{},widgetDisplay,
     // name→id map for Scriptable widget ingredient picker (keys with Firebase-forbidden chars stripped)
-    ingredientMap:Object.fromEntries((state.ingredients||[]).filter(i=>i.name&&!/[.#$/\[\]]/.test(i.name)).map(i=>[i.name,i.id]))};
+    ingredientMap:Object.fromEntries((state.ingredients||[]).filter(i=>i.name&&!/[.#$/\[\]]/.test(i.name)).map(i=>[i.name,i.id])),
+    // sorted names array for iOS Shortcut "Choose from List" (no dict key extraction needed in Shortcuts)
+    ingredientNames:(state.ingredients||[]).filter(i=>i.name&&!/[.#$/\[\]]/.test(i.name)).map(i=>i.name).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}))};
 }
 function encodeSync(state){return btoa(unescape(encodeURIComponent(JSON.stringify(getUserData(state)))));}
 function decodeSync(code,cur){
