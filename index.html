@@ -5822,17 +5822,14 @@ function App({user,onSignOut}){
           const qVals=Object.values(qa).filter(Boolean);
           if(!qVals.length)return;
           const s=stateRef.current;
-          const ingMap=Object.fromEntries((s.ingredients||[]).filter(i=>i.id&&i.name).map(i=>[i.id,i.name]));
-          const newNeededIds=[];
+          const toAdd=[];
           qVals.forEach(v=>{
             const id=typeof v==='object'?v.id:(typeof v==='string'&&v.length>10?v:'');
-            if(id&&ingMap[id]&&!(s.shopping.needed||[]).includes(id))newNeededIds.push(id);
+            if(id&&!(s.shopping.needed||[]).includes(id))toAdd.push(id);
           });
           db.ref('kitchen/quickAdd').remove();
-          if(newNeededIds.length){
-            const merged=[...new Set([...(s.shopping.needed||[]),...newNeededIds])];
-            db.ref('kitchen/shopping/needed').set(merged);
-          }
+          // Dispatch to app state so UI updates and fbWrite persists the change
+          toAdd.forEach(id=>dispatch({type:'TOGGLE_NEED',id}));
         });
         fbListen(db,ud=>{
           if(!ud){
