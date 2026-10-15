@@ -5814,6 +5814,26 @@ function App({user,onSignOut}){
         setFbDbUrl(url);
         fbConnectedRef=db.ref('.info/connected');
         fbConnectedRef.on('value',s=>{setSyncStatus(s.val()===true?'live':'connecting');});
+        // Dedicated quickAdd listener — always fires regardless of _writer filter,
+        // so the widget shortcut can add items even when the app is the last writer.
+        db.ref('kitchen/quickAdd').on('value',qaSnap=>{
+          const qa=qaSnap.val();
+          if(!qa||typeof qa!=='object')return;
+          const qVals=Object.values(qa).filter(Boolean);
+          if(!qVals.length)return;
+          const s=stateRef.current;
+          const ingMap=Object.fromEntries((s.ingredients||[]).filter(i=>i.id&&i.name).map(i=>[i.id,i.name]));
+          const newNeededIds=[];
+          qVals.forEach(v=>{
+            const id=typeof v==='object'?v.id:(typeof v==='string'&&v.length>10?v:'');
+            if(id&&ingMap[id]&&!(s.shopping.needed||[]).includes(id))newNeededIds.push(id);
+          });
+          db.ref('kitchen/quickAdd').remove();
+          if(newNeededIds.length){
+            const merged=[...new Set([...(s.shopping.needed||[]),...newNeededIds])];
+            db.ref('kitchen/shopping/needed').set(merged);
+          }
+        });
         fbListen(db,ud=>{
           if(!ud){
             // Firebase is empty — bootstrap only if local state has real content
