@@ -209,7 +209,9 @@ textarea.inp{resize:vertical;min-height:70px;}
 .cal-table td.today-col{background:#f8fdf8;}
 .cal-cell{min-height:32px;display:flex;flex-wrap:wrap;align-items:flex-start;gap:2px;padding:2px;}
 .cal-chip{display:inline-flex;align-items:center;gap:3px;background:#f0f7f0;border:1px solid var(--sage-light);border-radius:12px;padding:2px 7px;font-size:11px;color:var(--sage-dark);max-width:130px;}
-.cal-chip .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cal-chip .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:relative;}
+.cal-chip .name[title]:hover::after{content:attr(title);position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);background:rgba(30,30,30,.88);color:#fff;font-size:11px;padding:3px 8px;border-radius:6px;white-space:nowrap;pointer-events:none;z-index:9999;}
+.cal-chip{overflow:visible!important;}
 .cal-chip button{background:none;border:none;cursor:pointer;color:var(--sage-light);font-size:12px;padding:0;line-height:1;flex-shrink:0;}
 .cal-chip button:hover{color:var(--red);}
 .cal-chip.misc-chip{background:#fff3e0;border-color:#ffd180;color:var(--noa);}
@@ -496,7 +498,7 @@ function getUserData(state){
   return{v:1,mealPlan:state.mealPlan,shopping:state.shopping,holidays:state.holidays||{},
     customRecipes:(state.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id)),
     customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv,recOv,
-    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[],cookPlans:state.cookPlans||{},nextWeek:state.nextWeek||{},widgetDisplay,
+    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[],cookPlans:state.cookPlans||{},starredRecipes:state.starredRecipes||[],recipeUsage:state.recipeUsage||{},nextWeek:state.nextWeek||{},widgetDisplay,
     // name→id map for Scriptable widget ingredient picker (keys with Firebase-forbidden chars stripped)
     ingredientMap:Object.fromEntries((state.ingredients||[]).filter(i=>i.name&&!/[.#$/\[\]]/.test(i.name)).map(i=>[i.name,i.id])),
     // sorted names array for iOS Shortcut "Choose from List" (no dict key extraction needed in Shortcuts)
@@ -1001,7 +1003,7 @@ function decodeSync(code,cur){
     noaRoster:Array.isArray(ud.noaRoster)?ud.noaRoster:[],
     cheeses:Array.isArray(ud.cheeses)?ud.cheeses:[],
     customCookbooks:Array.isArray(ud.customCookbooks)?ud.customCookbooks:[],
-    cookPlans:(ud.cookPlans&&typeof ud.cookPlans==='object')?ud.cookPlans:{},nextWeek:ud.nextWeek||{}};
+    cookPlans:(ud.cookPlans&&typeof ud.cookPlans==='object')?ud.cookPlans:{},starredRecipes:Array.isArray(ud.starredRecipes)?ud.starredRecipes:[],recipeUsage:(ud.recipeUsage&&typeof ud.recipeUsage==='object')?ud.recipeUsage:{},nextWeek:ud.nextWeek||{}};
 }
 // ── Firebase sync — scripts loaded dynamically so they never block page load ──
 let fbApp=null;
@@ -1031,7 +1033,7 @@ const NOA_SEED_ROSTER=['noa-r-01','noa-r-02','noa-r-03','noa-r-04','noa-r-05','n
 function buildInitial(){
   return{recipes:window.SEED.recipes,ingredients:window.SEED.ingredients,
     mealPlan:{weekStart:getWeekStart(),days:Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}])),
-    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{},noaRoster:[...NOA_SEED_ROSTER],cheeses:[],customCookbooks:[],cookPlans:{},nextWeek:{mealPlan:{weekStart:null,days:Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}])),misc:[],noa:[],cooked:{}},shopping:{needed:[],pickedUp:[]}}};
+    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{},noaRoster:[...NOA_SEED_ROSTER],cheeses:[],customCookbooks:[],cookPlans:{},starredRecipes:[],recipeUsage:{},nextWeek:{mealPlan:{weekStart:null,days:Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}])),misc:[],noa:[],cooked:{}},shopping:{needed:[],pickedUp:[]}}};
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -1056,6 +1058,10 @@ function reducer(state,action){
       return{...state,recipes,ingredients,mealPlan,noaRoster};
     }
     case'DEL_REC':return{...state,recipes:state.recipes.filter(r=>r.id!==action.id)};
+    case'TOGGLE_STAR':{
+      const starred=state.starredRecipes||[];
+      return{...state,starredRecipes:starred.includes(action.id)?starred.filter(id=>id!==action.id):[...starred,action.id]};
+    }
     case'MEAL_ADD_REC':{
       const mp=state.mealPlan||{weekStart:getWeekStart(),days:{},misc:[],noa:[]};
       const days={...(mp.days||{})};
@@ -1063,7 +1069,8 @@ function reducer(state,action){
       const slot=[...(day[action.slot]||[])];
       if(!slot.includes(action.recId))slot.push(action.recId);
       day[action.slot]=slot;days[action.day]=day;
-      return{...state,mealPlan:{...mp,days}};
+      const usage=state.recipeUsage||{};
+      return{...state,mealPlan:{...mp,days},recipeUsage:{...usage,[action.recId]:(usage[action.recId]||0)+1}};
     }
     case'MEAL_RM_REC':{
       const days={...state.mealPlan.days};
@@ -1130,7 +1137,8 @@ function reducer(state,action){
       const _days={..._mp.days||{}};const _day={...(_days[action.day]||{})};const _slot=[...(_day[action.slot]||[])];
       if(!_slot.includes(action.recId))_slot.push(action.recId);
       _day[action.slot]=_slot;_days[action.day]=_day;
-      return{...state,nextWeek:{..._nw,mealPlan:{..._mp,days:_days}}};
+      const _usage=state.recipeUsage||{};
+      return{...state,nextWeek:{..._nw,mealPlan:{..._mp,days:_days}},recipeUsage:{..._usage,[action.recId]:(_usage[action.recId]||0)+1}};
     }
     case'NW_MEAL_RM_REC':{
       const _nw=state.nextWeek||{};const _mp=_nw.mealPlan||{days:{},misc:[],noa:[],cooked:{}};
@@ -2538,7 +2546,7 @@ function SyncModal({state,syncStatus,fbDbUrl,onSetupFb,onApply,onClose}){
 }
 
 // ── Inline calendar cell search — input lives in cell, dropdown escapes via portal ──
-function CalInlineInput({recipes,onSelect,onClose,planTag,existing=[]}){
+function CalInlineInput({recipes,onSelect,onClose,planTag,existing=[],starredRecipes=[],recipeUsage={}}){
   const[q,setQ]=useState('');
   const[ddPos,setDdPos]=useState(null);
   const inputRef=useRef();
@@ -2550,13 +2558,20 @@ function CalInlineInput({recipes,onSelect,onClose,planTag,existing=[]}){
       .filter(r=>!existingSet.has(r.id));
     if(!q.trim())return[];
     const ql=normQ(q);
+    const starSet=new Set(starredRecipes);
     return[...base].filter(r=>fuzzyMatch(r.name,q))
       .sort((a,b)=>{
-        // Exact-name match first, then starts-with, then contains — all alphabetical within tier
+        // Exact-name match first, then starts-with, then contains
         const an=normQ(a.name),bn=normQ(b.name);
         const at=an===ql?0:an.startsWith(ql)?1:2;
         const bt=bn===ql?0:bn.startsWith(ql)?1:2;
-        return at!==bt?at-bt:an.localeCompare(bn);
+        if(at!==bt)return at-bt;
+        // Within same match tier: starred first, then by usage count
+        const as=starSet.has(a.id)?1:0,bs=starSet.has(b.id)?1:0;
+        if(as!==bs)return bs-as;
+        const au=recipeUsage[a.id]||0,bu=recipeUsage[b.id]||0;
+        if(au!==bu)return bu-au;
+        return an.localeCompare(bn);
       });
   },[q,recipes]);
   function calcPos(){
@@ -3246,7 +3261,8 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
                   {isActive
                     ?<CalInlineInput recipes={state.recipes}
                         onSelect={r=>addRec(dkey,slot,r)}
-                        onClose={()=>setAdding(null)} planTag={planTag} existing={items}/>
+                        onClose={()=>setAdding(null)} planTag={planTag} existing={items}
+                        starredRecipes={state.starredRecipes||[]} recipeUsage={state.recipeUsage||{}}/>
                     :<button className="cal-add"onClick={()=>setAdding(a=>(a?.day===dkey&&a?.slot===slot)?null:{day:dkey,slot})}>＋</button>
                   }
                 </div>
@@ -3302,7 +3318,7 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
                   </div>;
                 })}
                 {isActive
-                  ?<CalInlineInput recipes={state.recipes}onSelect={r=>addRec(dkey,slot,r)}onClose={()=>setAdding(null)}planTag={planTag} existing={items}/>
+                  ?<CalInlineInput recipes={state.recipes}onSelect={r=>addRec(dkey,slot,r)}onClose={()=>setAdding(null)}planTag={planTag} existing={items}starredRecipes={state.starredRecipes||[]}recipeUsage={state.recipeUsage||{}}/>
                   :<button className="mob-add-btn"onClick={()=>setAdding({day:dkey,slot})}>＋</button>}
               </div>
             </div>;
@@ -3591,7 +3607,7 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
                       <button onClick={()=>nwRmRec(dkey,slot,item)}>×</button>
                     </div>)}
                     {isActive
-                      ?<CalInlineInput recipes={state.recipes}onSelect={r=>nwAddRec(dkey,slot,r)}onClose={()=>setNwAdding(null)}planTag={planTag}existing={items}/>
+                      ?<CalInlineInput recipes={state.recipes}onSelect={r=>nwAddRec(dkey,slot,r)}onClose={()=>setNwAdding(null)}planTag={planTag}existing={items}starredRecipes={state.starredRecipes||[]}recipeUsage={state.recipeUsage||{}}/>
                       :<button className="cal-add"onClick={()=>setNwAdding(a=>(a?.day===dkey&&a?.slot===slot)?null:{day:dkey,slot})}>＋</button>
                     }
                   </div>
@@ -3625,7 +3641,7 @@ function MealPlanTab({state,dispatch,showToast,onAddToHuckle}){
                     <button onClick={()=>nwRmRec(dkey,slot,item)}>×</button>
                   </div>)}
                   {isActive
-                    ?<CalInlineInput recipes={state.recipes}onSelect={r=>nwAddRec(dkey,slot,r)}onClose={()=>setNwAdding(null)}planTag={planTag}existing={items}/>
+                    ?<CalInlineInput recipes={state.recipes}onSelect={r=>nwAddRec(dkey,slot,r)}onClose={()=>setNwAdding(null)}planTag={planTag}existing={items}starredRecipes={state.starredRecipes||[]}recipeUsage={state.recipeUsage||{}}/>
                     :<button className="mob-add-btn"onClick={()=>setNwAdding({day:dkey,slot})}>＋</button>}
                 </div>
               </div>;
@@ -4599,8 +4615,16 @@ function RecipesTab({state,dispatch,showToast,onAddToHuckle}){
     if(search.trim()){rs=rs.filter(r=>fuzzyMatch(r.name,search));}
     if(ingFilters.size>0)rs=rs.filter(r=>(r.ingredientRefs||[]).some(ref=>ingFilters.has(ref.id)));
     if(timeFilter)rs=rs.filter(r=>r.time&&r.time<=timeFilter);
-    return[...rs].sort((a,b)=>a.name.localeCompare(b.name));
-  },[state.recipes,search,hFilters,ingFilters,timeFilter]);
+    const starred=new Set(state.starredRecipes||[]);
+    const usage=state.recipeUsage||{};
+    return[...rs].sort((a,b)=>{
+      const as=starred.has(a.id)?1:0,bs=starred.has(b.id)?1:0;
+      if(as!==bs)return bs-as; // starred first
+      const au=usage[a.id]||0,bu=usage[b.id]||0;
+      if(au!==bu)return bu-au; // higher usage first
+      return a.name.localeCompare(b.name);
+    });
+  },[state.recipes,state.starredRecipes,state.recipeUsage,search,hFilters,ingFilters,timeFilter]);
   function toggleIng(id,clearAll){
     if(clearAll){setIngFilters(new Set());return;}
     setIngFilters(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n;});
@@ -4651,6 +4675,7 @@ function RecipesTab({state,dispatch,showToast,onAddToHuckle}){
                 <div style={{display:'flex',gap:3,flexShrink:0,alignItems:'center'}}>
                   {r.holiday&&<span className="tag tag-holiday">{r.holiday}</span>}
                   {(r.tags||[]).filter(t=>t!==r.holiday&&t==='Nutbear').slice(0,1).map(t=><span key={t}className="tag tag-holiday"style={{background:'var(--sage-light)',color:'var(--sage-dark)',border:'1px solid var(--sage)',padding:'2px 6px'}}>{t}</span>)}
+                  <button className="btn-icon"style={{fontSize:14,padding:'2px 5px',color:(state.starredRecipes||[]).includes(r.id)?'#f5a623':'var(--muted)',opacity:1}}onClick={e=>{e.stopPropagation();dispatch({type:'TOGGLE_STAR',id:r.id});}}title={(state.starredRecipes||[]).includes(r.id)?'Unstar':'Star'}>{(state.starredRecipes||[]).includes(r.id)?'★':'☆'}</button>
                   <button className="btn-icon"style={{fontSize:14,padding:'2px 5px',color:'var(--sage-dark)'}}onClick={e=>{e.stopPropagation();setAtpRec(x=>x?.rec?.id===r.id?null:{rec:r,day:DAYS[Math.max(0,new Date().getDay()-1)].toLowerCase(),slot:'dinner',mode:'day'});}}title="Add to meal plan">📅</button>
                 </div>
               </div>
