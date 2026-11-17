@@ -1062,6 +1062,7 @@ function reducer(state,action){
       const starred=state.starredRecipes||[];
       return{...state,starredRecipes:starred.includes(action.id)?starred.filter(id=>id!==action.id):[...starred,action.id]};
     }
+    case'SET_SAVED_LINKS':return{...state,savedLinks:action.links||{}};
     case'SAVE_LINK':{
       const links={...(state.savedLinks||{})};
       const key='lnk_'+Date.now();
@@ -5878,6 +5879,14 @@ function App({user,onSignOut}){
           db.ref('kitchen/quickAdd').remove();
           // Dispatch to app state so UI updates and fbWrite persists the change
           toAdd.forEach(id=>dispatch({type:'TOGGLE_NEED',id}));
+        });
+        // Dedicated savedLinks listener — same fix as quickAdd: Shortcut POSTs directly
+        // to kitchen/savedLinks without updating _writer, so fbListen ignores it.
+        db.ref('kitchen/savedLinks').on('value',slSnap=>{
+          const links=slSnap.val()||{};
+          const cur=stateRef.current.savedLinks||{};
+          const newKeys=Object.keys(links).filter(k=>!cur[k]);
+          if(newKeys.length)dispatch({type:'SET_SAVED_LINKS',links});
         });
         fbListen(db,ud=>{
           if(!ud){
