@@ -498,7 +498,7 @@ function getUserData(state){
   return{v:1,mealPlan:state.mealPlan,shopping:state.shopping,holidays:state.holidays||{},
     customRecipes:(state.recipes||[]).filter(r=>!SEED_REC_IDS.has(r.id)),
     customIngs:(state.ingredients||[]).filter(i=>!SEED_ING_IDS.has(i.id)),ingOv,recOv,
-    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[],cookPlans:state.cookPlans||{},starredRecipes:state.starredRecipes||[],recipeUsage:state.recipeUsage||{},nextWeek:state.nextWeek||{},widgetDisplay,
+    noaRoster:state.noaRoster||[],cheeses:state.cheeses||[],customCookbooks:state.customCookbooks||[],cookPlans:state.cookPlans||{},starredRecipes:state.starredRecipes||[],recipeUsage:state.recipeUsage||{},savedLinks:state.savedLinks||{},nextWeek:state.nextWeek||{},widgetDisplay,
     // name→id map for Scriptable widget ingredient picker (keys with Firebase-forbidden chars stripped)
     ingredientMap:Object.fromEntries((state.ingredients||[]).filter(i=>i.name&&!/[.#$/\[\]]/.test(i.name)).map(i=>[i.name,i.id])),
     // sorted names array for iOS Shortcut "Choose from List" (no dict key extraction needed in Shortcuts)
@@ -1003,7 +1003,7 @@ function decodeSync(code,cur){
     noaRoster:Array.isArray(ud.noaRoster)?ud.noaRoster:[],
     cheeses:Array.isArray(ud.cheeses)?ud.cheeses:[],
     customCookbooks:Array.isArray(ud.customCookbooks)?ud.customCookbooks:[],
-    cookPlans:(ud.cookPlans&&typeof ud.cookPlans==='object')?ud.cookPlans:{},starredRecipes:Array.isArray(ud.starredRecipes)?ud.starredRecipes:[],recipeUsage:(ud.recipeUsage&&typeof ud.recipeUsage==='object')?ud.recipeUsage:{},nextWeek:ud.nextWeek||{}};
+    cookPlans:(ud.cookPlans&&typeof ud.cookPlans==='object')?ud.cookPlans:{},starredRecipes:Array.isArray(ud.starredRecipes)?ud.starredRecipes:[],recipeUsage:(ud.recipeUsage&&typeof ud.recipeUsage==='object')?ud.recipeUsage:{},nextWeek:ud.nextWeek||{},savedLinks:(ud.savedLinks&&typeof ud.savedLinks==='object')?ud.savedLinks:{}};
 }
 // ── Firebase sync — scripts loaded dynamically so they never block page load ──
 let fbApp=null;
@@ -1033,7 +1033,7 @@ const NOA_SEED_ROSTER=['noa-r-01','noa-r-02','noa-r-03','noa-r-04','noa-r-05','n
 function buildInitial(){
   return{recipes:window.SEED.recipes,ingredients:window.SEED.ingredients,
     mealPlan:{weekStart:getWeekStart(),days:Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}])),
-    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{},noaRoster:[...NOA_SEED_ROSTER],cheeses:[],customCookbooks:[],cookPlans:{},starredRecipes:[],recipeUsage:{},nextWeek:{mealPlan:{weekStart:null,days:Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}])),misc:[],noa:[],cooked:{}},shopping:{needed:[],pickedUp:[]}}};
+    misc:[],noa:[]},shopping:{needed:[],pickedUp:[]},holidays:{},noaRoster:[...NOA_SEED_ROSTER],cheeses:[],customCookbooks:[],cookPlans:{},starredRecipes:[],recipeUsage:{},savedLinks:{},nextWeek:{mealPlan:{weekStart:null,days:Object.fromEntries(DAYS.map(d=>[d.toLowerCase(),{breakfast:[],lunch:[],dinner:[],otherNomz:[]}])),misc:[],noa:[],cooked:{}},shopping:{needed:[],pickedUp:[]}}};
 }
 
 // ── Reducer ──────────────────────────────────────────────────────────────────
@@ -1061,6 +1061,17 @@ function reducer(state,action){
     case'TOGGLE_STAR':{
       const starred=state.starredRecipes||[];
       return{...state,starredRecipes:starred.includes(action.id)?starred.filter(id=>id!==action.id):[...starred,action.id]};
+    }
+    case'SAVE_LINK':{
+      const links={...(state.savedLinks||{})};
+      const key='lnk_'+Date.now();
+      links[key]=action.link;
+      return{...state,savedLinks:links};
+    }
+    case'DEL_LINK':{
+      const links={...(state.savedLinks||{})};
+      delete links[action.key];
+      return{...state,savedLinks:links};
     }
     case'MEAL_ADD_REC':{
       const mp=state.mealPlan||{weekStart:getWeekStart(),days:{},misc:[],noa:[]};
@@ -4087,6 +4098,18 @@ function ShoppingTab({state,dispatch,showToast,phase}){
         </div>
       </div>}
     </>}
+  {(()=>{const links=Object.entries(state.savedLinks||{}).sort((a,b)=>((b[1].savedAt||'')>(a[1].savedAt||'')?1:-1));if(!links.length)return null;return<div style={{marginTop:24}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+      <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5}}>📸 Spotted at TJs</div>
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+      {links.map(([key,item])=><div key={key}style={{position:'relative',aspectRatio:'1',borderRadius:10,overflow:'hidden',background:'var(--card-bg)',boxShadow:'0 1px 4px rgba(0,0,0,.12)',cursor:'pointer'}}onClick={()=>window.open(item.url,'_blank')}>
+        {item.thumbnailUrl?<img src={item.thumbnailUrl}alt={item.title||''}style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>📷</div>}
+        <button onClick={e=>{e.stopPropagation();dispatch({type:'DEL_LINK',key});}}style={{position:'absolute',top:4,right:4,background:'rgba(0,0,0,.55)',border:'none',borderRadius:'50%',width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#fff',fontSize:13,lineHeight:1,padding:0}}>×</button>
+        {item.title&&<div style={{position:'absolute',bottom:0,left:0,right:0,background:'linear-gradient(transparent,rgba(0,0,0,.7))',color:'#fff',fontSize:10,padding:'8px 6px 5px',lineHeight:1.3,wordBreak:'break-word'}}>{item.title}</div>}
+      </div>)}
+    </div>
+  </div>;})()}
   {viewing&&<RecipeViewModal recipe={viewing}ingredients={state.ingredients}
     onDuplicate={()=>{const{noaLabel:_nL,..._rest}=viewing;const _d={..._rest,id:uid(),name:viewing.name+' (copy)'};dispatch({type:'SAVE_REC',rec:_d,newIngs:[]});setViewing(null);setEditing(_d);showToast&&showToast('"'+viewing.name+'" duplicated!');}}
     onEdit={()=>{setEditing(viewing);setViewing(null);}}
@@ -6437,7 +6460,8 @@ function App({user,onSignOut}){
       {TABS.map(t=>{
         const em=t.label.match(/^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|[\u2600-\u27FF])/u)?.[0]||'';
         const txt=t.label.replace(em,'').trim();
-        const shopCount=t.id==='shop'?(state?.shopping?.needed||[]).filter(i=>!(state?.shopping?.pickedUp||[]).includes(i)).length:0;
+        const _ingIds=new Set((state?.ingredients||[]).map(i=>i.id));
+        const shopCount=t.id==='shop'?(state?.shopping?.needed||[]).filter(i=>_ingIds.has(i)&&!(state?.shopping?.pickedUp||[]).includes(i)).length:0;
         return<button key={t.id}className={`tab${tab===t.id?' on':''}`}onClick={()=>setTab(t.id)}>
           <span style={{fontSize:20,lineHeight:1.1,display:'block'}}>{em}</span>
           <span style={{display:'block'}}>{txt}{shopCount>0&&<span style={{background:'var(--noa)',color:'white',borderRadius:10,padding:'0 5px',marginLeft:3,fontSize:10}}>{shopCount}</span>}</span>
