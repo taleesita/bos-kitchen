@@ -6396,6 +6396,9 @@ function App({user,onSignOut}){
               cheeses:Array.isArray(ud.cheeses)?ud.cheeses:[],
               customCookbooks:Array.isArray(ud.customCookbooks)?ud.customCookbooks:[],
               cookPlans:(ud.cookPlans&&typeof ud.cookPlans==='object')?ud.cookPlans:{},
+              starredRecipes:Array.isArray(ud.starredRecipes)?ud.starredRecipes:[],
+              recipeUsage:(ud.recipeUsage&&typeof ud.recipeUsage==='object')?ud.recipeUsage:{},
+              savedLinks:(ud.savedLinks&&typeof ud.savedLinks==='object')?ud.savedLinks:{},
               nextWeek:ud.nextWeek||{}
             };
             fromFB.current=true; // mark so auto-save skips Firebase write-back
