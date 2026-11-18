@@ -4115,7 +4115,7 @@ function ShoppingTab({state,dispatch,showToast,phase,syncStatus,fbLoaded}){
     const getShortcode=url=>{if(!url)return null;const m=url.match(/instagram\.com\/p\/([A-Za-z0-9_-]+)/);return m?m[1]:null;};
     return<div style={{marginTop:24}}>
       <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>📸 Spotted at TJs</div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:10}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10}}>
         {links.map(([key,item])=>{
           const sc=getShortcode(item.url);
           return<div key={key}style={{position:'relative',borderRadius:12,overflow:'hidden',background:'var(--card-bg)',boxShadow:'0 1px 4px rgba(0,0,0,.12)',aspectRatio:'1'}}>
