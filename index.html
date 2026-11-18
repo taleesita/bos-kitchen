@@ -4109,7 +4109,7 @@ function ShoppingTab({state,dispatch,showToast,phase,syncStatus,fbLoaded}){
     const seenUrls=new Set();
     const links=allLinks
       .sort((a,b)=>((a[1].savedAt||'')>(b[1].savedAt||'')?1:-1))
-      .filter(([,item])=>{if(!item.url&&!item.thumbnailData)return false;if(!item.url)return true;if(seenUrls.has(item.url))return false;seenUrls.add(item.url);return true;})
+      .filter(([,item])=>{if(!item.url&&!item.thumbnailData)return false;if(item.thumbnailData)return true;if(!item.url)return true;if(seenUrls.has(item.url))return false;seenUrls.add(item.url);return true;})
       .sort((a,b)=>((b[1].savedAt||'')>(a[1].savedAt||'')?1:-1));
     if(!links.length)return null;
     const getShortcode=url=>{if(!url)return null;const m=url.match(/instagram\.com\/p\/([A-Za-z0-9_-]+)/);return m?m[1]:null;};
