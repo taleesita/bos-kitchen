@@ -3831,7 +3831,7 @@ return<div className="shop-item">
 </div>;
 }
 
-function ShoppingTab({state,dispatch,showToast,phase,syncStatus}){
+function ShoppingTab({state,dispatch,showToast,phase,syncStatus,fbLoaded}){
   const[sortBy,setSortBy]=useState('alpha'); // 'alpha' | 'recipe' | 'aisle'
   const[showRecipe,setShowRecipe]=useState(false);
   const[showQty,setShowQty]=useState(false);
@@ -4041,7 +4041,7 @@ function ShoppingTab({state,dispatch,showToast,phase,syncStatus}){
         {pickedUp.length>0&&<button className="btn btn-ghost btn-sm"onClick={()=>{dispatch({type:'CLEAR_PICK'});showToast('Cleared!');}}>Clear checked</button>}
       </div>
       {shopItems.length===0&&pickedUp.length===0&&(
-        (syncStatus==='connecting'||(syncStatus==='off'&&!!localStorage.getItem('kitchen_fb_url')))
+        (!fbLoaded&&!!localStorage.getItem('kitchen_fb_url'))
         ?<div className="empty"><div style={{fontSize:32,marginBottom:8}}>⏳</div><div>Loading your list…</div></div>
         :<div className="empty"><div className="empty-icon">🛒</div>Mark items as needed in the Needs? tab first.</div>
       )}
@@ -4109,7 +4109,7 @@ function ShoppingTab({state,dispatch,showToast,phase,syncStatus}){
     const seenUrls=new Set();
     const links=allLinks
       .sort((a,b)=>((a[1].savedAt||'')>(b[1].savedAt||'')?1:-1))
-      .filter(([,item])=>{const k=item.url||'';if(!k||seenUrls.has(k))return false;seenUrls.add(k);return true;})
+      .filter(([,item])=>{if(!item.url&&!item.thumbnailData)return false;if(!item.url)return true;if(seenUrls.has(item.url))return false;seenUrls.add(item.url);return true;})
       .sort((a,b)=>((b[1].savedAt||'')>(a[1].savedAt||'')?1:-1));
     if(!links.length)return null;
     const getShortcode=url=>{if(!url)return null;const m=url.match(/instagram\.com\/p\/([A-Za-z0-9_-]+)/);return m?m[1]:null;};
@@ -5798,6 +5798,7 @@ function App({user,onSignOut}){
   const[showSettings,setShowSettings]=useState(false);
   const[fbDbUrl,setFbDbUrl]=useState(()=>localStorage.getItem('kitchen_fb_url')||'https://bo-s-kitchen-default-rtdb.firebaseio.com/');
   const[syncStatus,setSyncStatus]=useState('off'); // off | connecting | live | error
+  const[fbLoaded,setFbLoaded]=useState(false);
   const[isOffline,setIsOffline]=useState(!navigator.onLine);
   useEffect(()=>{
     function goOffline(){setIsOffline(true);}
@@ -5913,6 +5914,7 @@ function App({user,onSignOut}){
             // Firebase is empty — bootstrap only if local state has real content
             // (prevents a fresh/empty device from wiping another device's data)
             fbInitialized.current=true;
+            setFbLoaded(true);
             const s=stateRef.current;
             const hasMeals=s&&Object.values(s.mealPlan?.days||{}).some(d=>
               ['breakfast','lunch','dinner','otherNomz'].some(slot=>(d[slot]||[]).length>0));
@@ -6424,6 +6426,7 @@ function App({user,onSignOut}){
             fromFB.current=true; // mark so auto-save skips Firebase write-back
             fbInitialized.current=true; // Firebase had data — safe to write back on future changes
             dispatch({type:'INIT',state:newState});
+            setFbLoaded(true);
           }catch(e){console.error('[fbListen] error processing Firebase data:',e);}
         });
       }catch(e){setSyncStatus('error');showToast('Firebase error: '+e.message);}
@@ -6501,8 +6504,8 @@ function App({user,onSignOut}){
       })}
     </nav>
     {tab==='mealplan'&&<MealPlanTab state={state}dispatch={dispatch}showToast={showToast}/>}
-    {tab==='needs'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='review'syncStatus={syncStatus}/>}
-    {tab==='shop'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='shop'syncStatus={syncStatus}/>}
+    {tab==='needs'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='review'syncStatus={syncStatus}fbLoaded={fbLoaded}/>}
+    {tab==='shop'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='shop'syncStatus={syncStatus}fbLoaded={fbLoaded}/>}
     {tab==='recipes'&&<RecipesTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {tab==='holidays'&&<HolidaysTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {tab==='noa'&&<NoaTab state={state}dispatch={dispatch}showToast={showToast}isNanny={isNanny}onAddToHuckle={addToHuckle}/>}
