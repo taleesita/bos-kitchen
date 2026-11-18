@@ -1074,6 +1074,11 @@ function reducer(state,action){
       delete links[action.key];
       return{...state,savedLinks:links};
     }
+    case'TOGGLE_LINK_CHECKED':{
+      const links={...(state.savedLinks||{})};
+      if(links[action.key])links[action.key]={...links[action.key],spottedChecked:!links[action.key].spottedChecked};
+      return{...state,savedLinks:links};
+    }
     case'MEAL_ADD_REC':{
       const mp=state.mealPlan||{weekStart:getWeekStart(),days:{},misc:[],noa:[]};
       const days={...(mp.days||{})};
@@ -4113,19 +4118,24 @@ function ShoppingTab({state,dispatch,showToast,phase,syncStatus,fbLoaded}){
       .sort((a,b)=>((b[1].savedAt||'')>(a[1].savedAt||'')?1:-1));
     if(!links.length)return null;
     const getShortcode=url=>{if(!url)return null;const m=url.match(/instagram\.com\/p\/([A-Za-z0-9_-]+)/);return m?m[1]:null;};
+    const unchecked=links.filter(([,it])=>!it.spottedChecked);
+    const checked=links.filter(([,it])=>it.spottedChecked);
+    const sorted=[...unchecked,...checked];
     return<div style={{marginTop:24}}>
       <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>📸 Spotted at TJs</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10}}>
-        {links.map(([key,item])=>{
+        {sorted.map(([key,item])=>{
           const sc=getShortcode(item.url);
-          return<div key={key}style={{position:'relative',borderRadius:12,overflow:'hidden',background:'var(--card-bg)',boxShadow:'0 1px 4px rgba(0,0,0,.12)',aspectRatio:'1'}}>
+          const done=!!item.spottedChecked;
+          return<div key={key}style={{position:'relative',borderRadius:12,overflow:'hidden',background:'var(--card-bg)',boxShadow:'0 1px 4px rgba(0,0,0,.12)',aspectRatio:'1',opacity:done?0.45:1,transition:'opacity .2s'}}>
             {item.thumbnailData
               ?<img src={item.thumbnailData.startsWith('data:')?item.thumbnailData:'data:'+(item.thumbnailData.startsWith('iVBOR')?'image/png':item.thumbnailData.startsWith('/9j/')?'image/jpeg':'image/png')+';base64,'+item.thumbnailData}style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>
               :sc
                 ?<iframe src={'https://www.instagram.com/p/'+sc+'/embed/'}style={{width:'100%',height:'100%',border:'none',display:'block'}}scrolling="no"allowTransparency="true"frameBorder="0"/>
                 :<div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:32}}>📷</div>
             }
-            <button onClick={e=>{e.stopPropagation();dispatch({type:'DEL_LINK',key});}}style={{position:'absolute',top:6,right:6,background:'rgba(0,0,0,.55)',border:'none',borderRadius:'50%',width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#fff',fontSize:15,lineHeight:1,padding:0,zIndex:10}}>×</button>
+            <button onClick={e=>{e.stopPropagation();dispatch({type:'DEL_LINK',key});}}style={{position:'absolute',top:6,left:6,background:'rgba(0,0,0,.55)',border:'none',borderRadius:'50%',width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#fff',fontSize:15,lineHeight:1,padding:0,zIndex:10}}>×</button>
+            <button onClick={e=>{e.stopPropagation();dispatch({type:'TOGGLE_LINK_CHECKED',key});}}style={{position:'absolute',top:6,right:6,background:done?'rgba(74,124,89,.9)':'rgba(0,0,0,.55)',border:'none',borderRadius:'50%',width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#fff',fontSize:13,lineHeight:1,padding:0,zIndex:10}}>✓</button>
           </div>;
         })}
       </div>
