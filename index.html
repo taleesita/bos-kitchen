@@ -3831,7 +3831,7 @@ return<div className="shop-item">
 </div>;
 }
 
-function ShoppingTab({state,dispatch,showToast,phase}){
+function ShoppingTab({state,dispatch,showToast,phase,syncStatus}){
   const[sortBy,setSortBy]=useState('alpha'); // 'alpha' | 'recipe' | 'aisle'
   const[showRecipe,setShowRecipe]=useState(false);
   const[showQty,setShowQty]=useState(false);
@@ -4040,7 +4040,10 @@ function ShoppingTab({state,dispatch,showToast,phase}){
         <div style={{fontSize:12,color:'var(--muted)'}}>Check items off as you grab them.</div>
         {pickedUp.length>0&&<button className="btn btn-ghost btn-sm"onClick={()=>{dispatch({type:'CLEAR_PICK'});showToast('Cleared!');}}>Clear checked</button>}
       </div>
-      {shopItems.length===0&&pickedUp.length===0&&<div className="empty"><div className="empty-icon">🛒</div>Mark items as needed in the Needs? tab first.</div>}
+      {shopItems.length===0&&pickedUp.length===0&&(syncStatus==='connecting'
+        ?<div className="empty"><div style={{fontSize:32,marginBottom:8,animation:'spin 1s linear infinite',display:'inline-block'}}>⏳</div><div>Loading your list…</div></div>
+        :<div className="empty"><div className="empty-icon">🛒</div>Mark items as needed in the Needs? tab first.</div>
+      )}
       {shopItems.length===0&&pickedUp.length>0&&<div className="empty"style={{padding:'32px 16px'}}>
         <div style={{fontSize:52,marginBottom:8,animation:'bounce .6s infinite alternate'}}>🎉</div>
         <div style={{fontSize:20,fontWeight:700,color:'var(--sage-dark)',marginBottom:4}}>You got everything!</div>
@@ -6497,8 +6500,8 @@ function App({user,onSignOut}){
       })}
     </nav>
     {tab==='mealplan'&&<MealPlanTab state={state}dispatch={dispatch}showToast={showToast}/>}
-    {tab==='needs'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='review'/>}
-    {tab==='shop'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='shop'/>}
+    {tab==='needs'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='review'syncStatus={syncStatus}/>}
+    {tab==='shop'&&<ShoppingTab state={state}dispatch={dispatch}showToast={showToast}phase='shop'syncStatus={syncStatus}/>}
     {tab==='recipes'&&<RecipesTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {tab==='holidays'&&<HolidaysTab state={state}dispatch={dispatch}showToast={showToast}/>}
     {tab==='noa'&&<NoaTab state={state}dispatch={dispatch}showToast={showToast}isNanny={isNanny}onAddToHuckle={addToHuckle}/>}
