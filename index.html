@@ -4127,15 +4127,15 @@ function ShoppingTab({state,dispatch,showToast,phase,syncStatus,fbLoaded}){
         {sorted.map(([key,item])=>{
           const sc=getShortcode(item.url);
           const done=!!item.spottedChecked;
-          return<div key={key}style={{position:'relative',borderRadius:12,overflow:'hidden',background:'var(--card-bg)',boxShadow:'0 1px 4px rgba(0,0,0,.12)',aspectRatio:'1',opacity:done?0.45:1,transition:'opacity .2s'}}>
+          return<div key={key}onClick={()=>dispatch({type:'TOGGLE_LINK_CHECKED',key})}style={{position:'relative',borderRadius:12,overflow:'hidden',background:'var(--card-bg)',boxShadow:'0 1px 4px rgba(0,0,0,.12)',aspectRatio:'1',opacity:done?0.45:1,transition:'opacity .2s',cursor:'pointer'}}>
             {item.thumbnailData
               ?<img src={item.thumbnailData.startsWith('data:')?item.thumbnailData:'data:'+(item.thumbnailData.startsWith('iVBOR')?'image/png':item.thumbnailData.startsWith('/9j/')?'image/jpeg':'image/png')+';base64,'+item.thumbnailData}style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>
               :sc
-                ?<iframe src={'https://www.instagram.com/p/'+sc+'/embed/'}style={{width:'100%',height:'100%',border:'none',display:'block'}}scrolling="no"allowTransparency="true"frameBorder="0"/>
+                ?<iframe src={'https://www.instagram.com/p/'+sc+'/embed/'}style={{width:'100%',height:'100%',border:'none',display:'block',pointerEvents:'none'}}scrolling="no"allowTransparency="true"frameBorder="0"/>
                 :<div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:32}}>📷</div>
             }
-            <button onClick={e=>{e.stopPropagation();dispatch({type:'DEL_LINK',key});}}style={{position:'absolute',top:6,left:6,background:'rgba(0,0,0,.55)',border:'none',borderRadius:'50%',width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#fff',fontSize:15,lineHeight:1,padding:0,zIndex:10}}>×</button>
-            <button onClick={e=>{e.stopPropagation();dispatch({type:'TOGGLE_LINK_CHECKED',key});}}style={{position:'absolute',top:6,right:6,background:done?'rgba(74,124,89,.9)':'rgba(0,0,0,.55)',border:'none',borderRadius:'50%',width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#fff',fontSize:13,lineHeight:1,padding:0,zIndex:10}}>✓</button>
+            {done&&<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{background:'rgba(74,124,89,.75)',borderRadius:'50%',width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,color:'#fff'}}>✓</div></div>}
+            <button onClick={e=>{e.stopPropagation();dispatch({type:'DEL_LINK',key});}}style={{position:'absolute',top:6,left:6,background:'rgba(0,0,0,.55)',border:'none',borderRadius:'50%',width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#fff',fontSize:13,lineHeight:1,padding:0,zIndex:10}}>🗑</button>
           </div>;
         })}
       </div>
